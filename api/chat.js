@@ -1,13 +1,11 @@
 const SYSTEM_PROMPT = `
 You are Nexus AI Web Developer.
 
-You are an expert frontend engineer.
+You are an AI coding agent that helps users build websites.
 
-Your job is to modify a React website based on the user's request.
+The user sends a request and the current project files.
 
-Return ONLY valid JSON.
-
-The JSON must have this exact structure:
+Return ONLY valid JSON in exactly this format:
 
 {
   "message": "short explanation of what you changed",
@@ -17,54 +15,15 @@ The JSON must have this exact structure:
   }
 }
 
-Rules:
-
-1. Always return complete file contents.
-2. Never return markdown.
-3. Never use code fences.
-4. Never return explanations outside JSON.
-5. The website must look professionally designed.
-6. Use modern responsive CSS.
-7. Do not use external image URLs unless the user explicitly asks.
-8. Do not use external libraries inside App.js.
-9. Use React only.
-10. Keep the project compatible with Sandpack React.
-11. If the user asks to improve the existing website, preserve useful existing functionality.
-12. Make visual decisions like a professional product designer.
-13. Avoid generic AI-looking gradients, excessive glassmorphism, random icons and unnecessary animations.
-14. Prefer strong typography, spacing, hierarchy and polished responsive layouts.
-15. Use semantic HTML.
-16. Accessibility matters.
-17. Never remove existing functionality unless the user asks.
-18. Return both /App.js and /styles.css every time.
+IMPORTANT:
+- Always return complete file contents.
+- Never return markdown.
+- Never wrap JSON in code fences.
+- Keep React code valid.
+- Use React and plain CSS.
+- Do not invent missing project files.
+- If the user asks to create a website, actually create the website code.
 `;
-
-function extractJson(text) {
-  let cleaned = text.trim();
-
-  if (cleaned.startsWith("```")) {
-    cleaned = cleaned
-      .replace(/^```(?:json)?/i, "")
-      .replace(/```$/i, "")
-      .trim();
-  }
-
-  const firstBrace = cleaned.indexOf("{");
-  const lastBrace = cleaned.lastIndexOf("}");
-
-  if (
-    firstBrace !== -1 &&
-    lastBrace !== -1 &&
-    lastBrace > firstBrace
-  ) {
-    cleaned = cleaned.slice(
-      firstBrace,
-      lastBrace + 1
-    );
-  }
-
-  return JSON.parse(cleaned);
-}
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
@@ -74,158 +33,133 @@ export default async function handler(req, res) {
   }
 
   try {
-    if (!process.env.OPENROUTER_API_KEY) {
-      return res.status(500).json({
-        error:
-          "OPENROUTER_API_KEY is not configured."
-      });
-    }
+    const { prompt, files = {} } = req.body || {};
 
-    const body = req.body || {};
-
-    const prompt = String(body.prompt || "").trim();
-
-    if (!prompt) {
+    if (!prompt || !prompt.trim()) {
       return res.status(400).json({
-        error: "Prompt is required."
+        error: "Please enter a website request."
       });
     }
 
-    const existingFiles =
-      body.files || {};
+    const apiKey = process.env.OPENROUTER_API_KEY;
+
+    if (!apiKey) {
+      return res.status(500).json({
+        error: "OPENROUTER_API_KEY is missing in Vercel."
+      });
+    }
 
     const model =
-      process.env.OPENROUTER_MODEL ||
-      "nex-agi/nex-n2.5-pro:free";
-
-    const fileContext = Object.entries(
-      existingFiles
-    )
-      .map(([path, value]) => {
-        const code =
-          typeof value === "string"
-            ? value
-            : value?.code || "";
-
-        return `
-FILE: ${path}
-
-${code}
-`;
-      })
-      .join("\n");
+      process.env.OPENROUTER_MODEL || "openrouter/free";
 
     const userMessage = `
 USER REQUEST:
-
 ${prompt}
 
-CURRENT PROJECT:
-
-${fileContext}
-
-Now modify the project according to the user's request.
-
-Return ONLY valid JSON.
+CURRENT PROJECT FILES:
+${JSON.stringify(files, null, 2)}
 `;
 
-    const response = await fetch(
-      "https://openrouter.ai/api/v1/chat/completions",
-      {
-        method: "POST",
+    const controller = new AbortController();
 
-        headers: {
-          Authorization:
-            `Bearer ${process.env.OPENROUTER_API_KEY}`,
+    // Stop waiting forever if OpenRouter gets stuck.
+    const timeout = setTimeout(() => {
+      controller.abort();
+    }, 45000);
 
-          "Content-Type":
-            "application/json",
+    let response;
 
-          "HTTP-Referer":
-            "https://nexusai-web-developer.vercel.app",
-
-          "X-Title":
-            "Nexus AI Web Developer"
-        },
-
-        body: JSON.stringify({
-          model,
-
-          messages: [
-            {
-              role: "system",
-              content: SYSTEM_PROMPT
-            },
-            {
-              role: "user",
-              content: userMessage
-            }
-          ],
-
-          temperature: 0.25,
-
-          max_tokens: 12000
-        })
-      }
-    );
+    try {
+      response = await fetch(
+        "https://openrouter.ai/api/v1/chat/completions",
+        {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${apiKey}`,
+            "Content-Type": "application/json",
+            "HTTP-Referer":
+              process.env.SITE_URL ||
+              "https://nexusai-web-developer.vercel.app",
+            "X-Title": "Nexus AI Web Developer"
+          },
+          body: JSON.stringify({
+            model,
+            messages: [
+              {
+                role: "system",
+                content: SYSTEM_PROMPT
+              },
+              {
+                role: "user",
+                content: userMessage
+              }
+            ],
+            temperature: 0.2,
+            max_tokens: 12000
+          }),
+          signal: controller.signal
+        }
+      );
+    } finally {
+      clearTimeout(timeout);
+    }
 
     const data = await response.json();
 
     if (!response.ok) {
-      const errorMessage =
-        data?.error?.message ||
-        "OpenRouter request failed.";
+      console.error("OpenRouter error:", data);
 
-      return res.status(response.status).json({
-        error: errorMessage
+      return res.status(502).json({
+        error:
+          data?.error?.message ||
+          "OpenRouter could not generate a response.",
+        details: data?.error || null
       });
     }
 
-    const content =
-      data?.choices?.[0]?.message?.content;
+    const content = data?.choices?.[0]?.message?.content;
 
     if (!content) {
-      return res.status(500).json({
-        error:
-          "The AI returned an empty response."
+      return res.status(502).json({
+        error: "AI returned an empty response."
       });
     }
 
     let result;
 
     try {
-      result = extractJson(content);
-    } catch {
-      return res.status(500).json({
-        error:
-          "The AI response was not valid JSON. Try the request again."
+      const cleaned = content
+        .replace(/^```json\s*/i, "")
+        .replace(/^```\s*/i, "")
+        .replace(/\s*```$/i, "")
+        .trim();
+
+      result = JSON.parse(cleaned);
+    } catch (parseError) {
+      console.error("JSON parse error:", content);
+
+      return res.status(502).json({
+        error: "AI returned an invalid website response.",
+        raw: content.slice(0, 1000)
       });
     }
 
-    if (
-      !result.files ||
-      typeof result.files !== "object"
-    ) {
-      return res.status(500).json({
-        error:
-          "The AI did not return valid project files."
-      });
-    }
+    return res.status(200).json(result);
 
-    return res.status(200).json({
-      message:
-        result.message ||
-        "Project updated successfully.",
-
-      files: result.files
-    });
   } catch (error) {
-    console.error(error);
+    console.error("Nexus AI error:", error);
+
+    if (error?.name === "AbortError") {
+      return res.status(504).json({
+        error:
+          "AI response took too long. Please try again."
+      });
+    }
 
     return res.status(500).json({
       error:
         error?.message ||
-        "Unexpected server error."
+        "Something went wrong while generating the website."
     });
   }
-}
+  }
