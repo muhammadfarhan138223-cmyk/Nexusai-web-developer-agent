@@ -180,7 +180,7 @@ p {
 const starterMessage = {
   id: 1,
   role: "assistant",
-  text: "Welcome to Nexus AI. Describe the website you want to build and I'll generate the code for the live preview."
+  text: "Welcome to Buildora. Describe the website you want to build and I'll generate the code for the live preview."
 };
 
 function App() {
@@ -210,6 +210,13 @@ function App() {
       text
     };
 
+    // Snapshot of the conversation so far (before this new message),
+    // sent to the backend so follow-up edits have context beyond just
+    // the current file state.
+    const historyForRequest = messages
+      .filter((m) => !m.error)
+      .map((m) => ({ role: m.role, text: m.text }));
+
     setMessages((prev) => [...prev, userMessage]);
     setPrompt("");
     setLoading(true);
@@ -222,7 +229,8 @@ function App() {
         },
         body: JSON.stringify({
           prompt: text,
-          files
+          files,
+          history: historyForRequest
         })
       });
 
@@ -338,12 +346,12 @@ function App() {
           </button>
 
           <div className="nexusLogo">
-            <span>N</span>
+            <span>B</span>
           </div>
 
           <div className="brandText">
-            <strong>NEXUS AI</strong>
-            <small>WEB DEVELOPER</small>
+            <strong>BUILDORA</strong>
+            <small>AI WEB BUILDER</small>
           </div>
 
           <div className="projectBadge">
@@ -780,7 +788,7 @@ function App() {
           <div className="mobileDrawer">
 
             <div className="drawerHeader">
-              <strong>NEXUS AI</strong>
+              <strong>BUILDORA</strong>
 
               <button
                 onClick={() =>
