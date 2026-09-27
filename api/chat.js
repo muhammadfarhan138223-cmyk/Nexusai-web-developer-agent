@@ -1,5 +1,5 @@
 const SYSTEM_PROMPT = `
-You are Nexus AI Web Developer.
+You are Buildora, an AI web developer.
 
 You are an AI coding agent that creates and edits websites.
 
@@ -52,6 +52,7 @@ export default async function handler(req, res) {
 
     const prompt = body.prompt;
     const files = body.files || {};
+    const history = Array.isArray(body.history) ? body.history : [];
 
     if (!prompt || typeof prompt !== "string") {
       return res.status(400).json({
@@ -69,11 +70,13 @@ export default async function handler(req, res) {
     }
 
     /*
-     * openrouter/free automatically chooses
-     * an available free model.
+     * A specific, reliable free coding model — instead of the
+     * "openrouter/free" auto-router, which OpenRouter itself documents
+     * as "preview status, quality and latency vary". A named model
+     * gives consistent results between requests.
      */
     const model =
-      process.env.OPENROUTER_MODEL || "openrouter/free";
+      process.env.OPENROUTER_MODEL || "qwen/qwen3-coder:free";
 
     const userMessage = `
 USER REQUEST:
@@ -86,11 +89,21 @@ Remember:
 Return ONLY the required JSON object.
 `;
 
+    // Include prior turns so follow-up edits ("make that button bigger")
+    // have context beyond just the current file state.
+    const conversationMessages = history
+      .filter((m) => m && typeof m.text === "string" && (m.role === "user" || m.role === "assistant"))
+      .slice(-10) // keep the last 10 turns — enough context without bloating the prompt
+      .map((m) => ({
+        role: m.role === "assistant" ? "assistant" : "user",
+        content: m.text
+      }));
+
     const controller = new AbortController();
 
     const timeout = setTimeout(() => {
       controller.abort();
-    }, 40000);
+    }, 55000); // stays under the 60s maxDuration set in vercel.json
 
     let response;
 
@@ -106,9 +119,9 @@ Return ONLY the required JSON object.
 
             "HTTP-Referer":
               process.env.SITE_URL ||
-              "https://nexusai-web-developer.vercel.app",
+              "https://buildora.vercel.app",
 
-            "X-Title": "Nexus AI Web Developer"
+            "X-Title": "Buildora"
           },
 
           body: JSON.stringify({
@@ -119,6 +132,7 @@ Return ONLY the required JSON object.
                 role: "system",
                 content: SYSTEM_PROMPT
               },
+              ...conversationMessages,
               {
                 role: "user",
                 content: userMessage
@@ -268,7 +282,7 @@ Return ONLY the required JSON object.
 
   } catch (error) {
     console.error(
-      "Nexus AI backend error:",
+      "Buildora backend error:",
       error
     );
 
@@ -282,7 +296,7 @@ Return ONLY the required JSON object.
     return res.status(500).json({
       error:
         error?.message ||
-        "Nexus AI could not generate the website."
+        "Buildora could not generate the website."
     });
   }
-}
+              }
