@@ -1,137 +1,374 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
+  ArrowUp,
+  Bot,
+  ChevronDown,
+  ChevronRight,
+  Code2,
+  Copy,
+  Eye,
+  FileCode2,
+  FileText,
+  Folder,
+  FolderOpen,
+  Loader2,
+  Menu,
+  MessageSquare,
+  Monitor,
+  PanelLeft,
+  Play,
+  Plus,
+  RefreshCw,
+  RotateCcw,
   Send,
   Sparkles,
-  Code2,
-  Eye,
-  RotateCcw,
-  PanelLeft,
+  Tablet,
+  Smartphone,
+  X,
+  Zap
 } from "lucide-react";
 
 import {
-  SandpackProvider,
-  SandpackLayout,
   SandpackCodeEditor,
+  SandpackLayout,
   SandpackPreview,
+  SandpackProvider
 } from "@codesandbox/sandpack-react";
 
-const initialFiles = {
+const starterFiles = {
   "/App.js": {
     code: `import React from "react";
+import "./styles.css";
 
 export default function App() {
   return (
-    <div style={{
-      minHeight: "100vh",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      background: "#0b1020",
-      color: "white",
-      fontFamily: "Arial"
-    }}>
-      <div style={{ textAlign: "center" }}>
-        <h1 style={{ fontSize: "42px" }}>
-          Hello from AI Builder
+    <main className="page">
+      <section className="hero">
+        <div className="badge">
+          <span className="dot"></span>
+          Built with Nexus AI
+        </div>
+
+        <h1>
+          Build something
+          <span> remarkable.</span>
         </h1>
 
-        <p style={{
-          color: "#9ca3af",
-          fontSize: "18px"
-        }}>
-          Your AI-generated website appears here.
+        <p>
+          Describe your idea and let AI turn it into a
+          beautiful working website.
         </p>
 
-        <button style={{
-          marginTop: "20px",
-          padding: "12px 22px",
-          borderRadius: "10px",
-          border: "none",
-          background: "#2563eb",
-          color: "white",
-          cursor: "pointer"
-        }}>
-          Get Started
-        </button>
-      </div>
-    </div>
+        <div className="actions">
+          <button className="primary">
+            Start Building
+          </button>
+
+          <button className="secondary">
+            Explore
+          </button>
+        </div>
+      </section>
+    </main>
   );
-}`,
+}
+`
   },
+
+  "/styles.css": {
+    code: `* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: Inter, Arial, sans-serif;
+  background: #070a12;
+  color: #ffffff;
+}
+
+button {
+  font: inherit;
+}
+
+.page {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 40px 20px;
+  background:
+    radial-gradient(
+      circle at 50% 20%,
+      rgba(37, 99, 235, 0.18),
+      transparent 38%
+    ),
+    #070a12;
+}
+
+.hero {
+  max-width: 760px;
+  text-align: center;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 13px;
+  border: 1px solid #263044;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.7);
+  color: #aeb9cc;
+  font-size: 13px;
+}
+
+.dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #38bdf8;
+  box-shadow: 0 0 14px #38bdf8;
+}
+
+h1 {
+  margin: 25px 0 18px;
+  font-size: clamp(42px, 7vw, 76px);
+  line-height: 0.98;
+  letter-spacing: -4px;
+}
+
+h1 span {
+  color: #60a5fa;
+}
+
+p {
+  max-width: 570px;
+  margin: auto;
+  color: #8f9bb0;
+  font-size: 18px;
+  line-height: 1.7;
+}
+
+.actions {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 32px;
+}
+
+.actions button {
+  border-radius: 12px;
+  padding: 13px 21px;
+  cursor: pointer;
+}
+
+.primary {
+  border: 0;
+  color: white;
+  background: #2563eb;
+}
+
+.secondary {
+  border: 1px solid #293449;
+  color: #dce5f4;
+  background: #101622;
+}
+`
+  }
+};
+
+const starterMessage = {
+  id: 1,
+  role: "assistant",
+  text: "Welcome to Nexus AI. Describe the website you want to build and I'll generate the code for the live preview."
 };
 
 function App() {
-  const [message, setMessage] = useState("");
-  const [messages, setMessages] = useState([
-    {
-      role: "assistant",
-      text: "Hi! I'm your AI coding assistant. Tell me what you want to build."
-    }
-  ]);
+  const [files, setFiles] = useState(starterFiles);
+  const [messages, setMessages] = useState([starterMessage]);
+  const [prompt, setPrompt] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [activeFile, setActiveFile] = useState("/App.js");
+  const [previewMode, setPreviewMode] = useState("desktop");
+  const [mobileMenu, setMobileMenu] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [copied, setCopied] = useState(false);
 
-  const [files, setFiles] = useState(initialFiles);
+  const fileList = useMemo(
+    () => Object.keys(files),
+    [files]
+  );
 
-  const sendMessage = () => {
-    const text = message.trim();
+  const sendPrompt = async () => {
+    const text = prompt.trim();
 
-    if (!text) return;
+    if (!text || loading) return;
 
-    setMessages((prev) => [
-      ...prev,
-      {
-        role: "user",
-        text,
-      },
-      {
-        role: "assistant",
-        text: "Got it. AI code generation will be connected here. For now, the Sandpack preview is running live on the right."
+    const userMessage = {
+      id: Date.now(),
+      role: "user",
+      text
+    };
+
+    setMessages((prev) => [...prev, userMessage]);
+    setPrompt("");
+    setLoading(true);
+
+    try {
+      const response = await fetch("/api/chat", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          prompt: text,
+          files
+        })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data.error || "Something went wrong."
+        );
       }
-    ]);
 
-    setMessage("");
+      if (data.files) {
+        const nextFiles = {};
+
+        Object.entries(data.files).forEach(
+          ([path, value]) => {
+            nextFiles[path] = {
+              code:
+                typeof value === "string"
+                  ? value
+                  : value.code || ""
+            };
+          }
+        );
+
+        if (Object.keys(nextFiles).length > 0) {
+          setFiles((prev) => ({
+            ...prev,
+            ...nextFiles
+          }));
+
+          if (nextFiles["/App.js"]) {
+            setActiveFile("/App.js");
+          }
+        }
+      }
+
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: Date.now() + 1,
+          role: "assistant",
+          text:
+            data.message ||
+            "Done. I've updated the project preview."
+        }
+      ]);
+    } catch (error) {
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: Date.now() + 1,
+          role: "assistant",
+          error: true,
+          text:
+            error.message ||
+            "Unable to connect to the AI backend."
+        }
+      ]);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const resetProject = () => {
-    setFiles(initialFiles);
+    setFiles(starterFiles);
+    setActiveFile("/App.js");
 
     setMessages([
       {
-        role: "assistant",
-        text: "Project reset. What would you like to build?"
+        ...starterMessage,
+        id: Date.now()
       }
     ]);
   };
 
+  const copyCode = async () => {
+    const code = files[activeFile]?.code || "";
+
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopied(true);
+
+      setTimeout(() => {
+        setCopied(false);
+      }, 1400);
+    } catch {
+      // Clipboard may be blocked by browser permissions.
+    }
+  };
+
+  const fileIcon = (path) => {
+    if (path.endsWith(".css")) {
+      return <FileText size={15} />;
+    }
+
+    return <FileCode2 size={15} />;
+  };
+
   return (
-    <div className="app">
+    <div className="appShell">
 
-      {/* HEADER */}
-      <header className="header">
+      {/* TOP BAR */}
+      <header className="topbar">
 
-        <div className="brand">
-          <div className="brandIcon">
-            <Sparkles size={18} />
-          </div>
-
-          <div>
-            <strong>AI Builder</strong>
-            <span>Build with AI</span>
-          </div>
-        </div>
-
-        <div className="headerActions">
+        <div className="brandArea">
 
           <button
-            className="iconButton"
-            onClick={resetProject}
-            title="Reset"
+            className="mobileIcon"
+            onClick={() => setMobileMenu(true)}
           >
-            <RotateCcw size={17} />
+            <Menu size={18} />
           </button>
 
-          <button className="previewButton">
-            <Eye size={16} />
-            Preview
+          <div className="nexusLogo">
+            <span>N</span>
+          </div>
+
+          <div className="brandText">
+            <strong>NEXUS AI</strong>
+            <small>WEB DEVELOPER</small>
+          </div>
+
+          <div className="projectBadge">
+            Untitled project
+          </div>
+
+        </div>
+
+        <div className="topActions">
+
+          <button
+            className="topButton"
+            onClick={resetProject}
+          >
+            <RotateCcw size={15} />
+            Reset
+          </button>
+
+          <button className="runButton">
+            <Play size={14} />
+            Run
+          </button>
+
+          <button className="avatarButton">
+            F
           </button>
 
         </div>
@@ -139,73 +376,167 @@ function App() {
       </header>
 
 
-      {/* MAIN */}
-      <main className="workspace">
+      {/* WORKSPACE */}
+      <div className="workspace">
 
-        {/* LEFT CHAT */}
-        <aside className="chatPanel">
+        {/* LEFT PANEL */}
+        <aside
+          className={`leftPanel ${
+            sidebarOpen ? "" : "collapsed"
+          }`}
+        >
 
-          <div className="chatHeader">
+          <div className="chatTop">
+
             <div>
-              <strong>AI Assistant</strong>
-              <span>Describe what you want to build</span>
+              <div className="sectionTitle">
+                <MessageSquare size={15} />
+                Assistant
+              </div>
+
+              <div className="sectionSub">
+                Build your idea with AI
+              </div>
             </div>
 
-            <PanelLeft size={18} />
+            <button
+              className="smallIcon"
+              onClick={() => setSidebarOpen(false)}
+            >
+              <PanelLeft size={16} />
+            </button>
+
           </div>
 
 
-          {/* MESSAGES */}
-          <div className="messages">
+          {/* CHAT */}
+          <div className="chatMessages">
 
-            {messages.map((msg, index) => (
+            {messages.map((message) => (
+
               <div
-                key={index}
-                className={`message ${msg.role}`}
+                key={message.id}
+                className={`chatMessage ${message.role}`}
               >
 
-                {msg.role === "assistant" && (
-                  <div className="avatar">
-                    <Sparkles size={14} />
+                {message.role === "assistant" && (
+                  <div className="messageAvatar">
+                    {message.error ? (
+                      <Zap size={14} />
+                    ) : (
+                      <Sparkles size={14} />
+                    )}
                   </div>
                 )}
 
-                <div className="messageContent">
-                  {msg.text}
+                <div
+                  className={`messageBubble ${
+                    message.error ? "error" : ""
+                  }`}
+                >
+                  {message.text}
                 </div>
 
               </div>
+
             ))}
+
+            {loading && (
+              <div className="chatMessage assistant">
+
+                <div className="messageAvatar">
+                  <Sparkles size={14} />
+                </div>
+
+                <div className="messageBubble generating">
+
+                  <Loader2
+                    size={15}
+                    className="spin"
+                  />
+
+                  Generating your website...
+
+                </div>
+
+              </div>
+            )}
 
           </div>
 
 
-          {/* INPUT */}
-          <div className="inputArea">
+          {/* SUGGESTIONS */}
+          {messages.length <= 1 && (
+            <div className="suggestions">
+
+              <button
+                onClick={() =>
+                  setPrompt(
+                    "Create a premium SaaS landing page with a dark design, hero section, features, pricing and responsive layout."
+                  )
+                }
+              >
+                <Sparkles size={14} />
+                SaaS landing page
+              </button>
+
+              <button
+                onClick={() =>
+                  setPrompt(
+                    "Create a modern portfolio website for a creative developer with projects, about section and contact CTA."
+                  )
+                }
+              >
+                <Code2 size={14} />
+                Developer portfolio
+              </button>
+
+            </div>
+          )}
+
+
+          {/* PROMPT */}
+          <div className="composer">
 
             <textarea
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  sendMessage();
+              value={prompt}
+              onChange={(event) =>
+                setPrompt(event.target.value)
+              }
+              onKeyDown={(event) => {
+                if (
+                  event.key === "Enter" &&
+                  !event.shiftKey
+                ) {
+                  event.preventDefault();
+                  sendPrompt();
                 }
               }}
-              placeholder="Describe your website..."
+              placeholder="Describe what you want to build..."
+              disabled={loading}
             />
 
-            <div className="inputBottom">
+            <div className="composerBottom">
 
               <span>
-                Press Enter to send
+                Enter to send · Shift + Enter for new line
               </span>
 
               <button
-                onClick={sendMessage}
                 className="sendButton"
+                onClick={sendPrompt}
+                disabled={
+                  loading || !prompt.trim()
+                }
               >
-                <Send size={16} />
+                {loading ? (
+                  <Loader2
+                    size={16}
+                    className="spin"
+                  />
+                ) : (
+                  <ArrowUp size={17} />
+                )}
               </button>
 
             </div>
@@ -215,65 +546,279 @@ function App() {
         </aside>
 
 
-        {/* RIGHT BUILDER */}
-        <section className="builderPanel">
+        {/* COLLAPSED LEFT */}
+        {!sidebarOpen && (
+          <button
+            className="expandSidebar"
+            onClick={() => setSidebarOpen(true)}
+          >
+            <PanelLeft size={17} />
+          </button>
+        )}
 
-          <div className="builderHeader">
 
-            <div className="builderTitle">
-              <Code2 size={17} />
-              <span>Code</span>
+        {/* CENTER EDITOR */}
+        <section className="editorPanel">
+
+          <div className="panelHeader">
+
+            <div className="panelHeading">
+              <Code2 size={15} />
+              Code
             </div>
 
-            <div className="status">
-              <span className="statusDot" />
-              Live
-            </div>
+            <button
+              className="copyButton"
+              onClick={copyCode}
+            >
+              <Copy size={14} />
+              {copied ? "Copied" : "Copy"}
+            </button>
 
           </div>
 
 
-          <div className="sandpackContainer">
+          <div className="editorBody">
 
-            <SandpackProvider
-              template="react"
-              files={files}
-              theme="dark"
-              options={{
-                activeFile: "/App.js",
-                visibleFiles: ["/App.js"]
-              }}
-            >
+            <div className="fileTree">
 
-              <SandpackLayout>
+              <div className="treeHeader">
+                <span>FILES</span>
 
-                <SandpackCodeEditor
-                  showTabs
-                  showLineNumbers
-                  showInlineErrors
-                  wrapContent
-                  style={{
-                    height: "100%"
-                  }}
-                />
+                <button>
+                  <Plus size={14} />
+                </button>
+              </div>
 
-                <SandpackPreview
-                  showOpenInCodeSandbox={false}
-                  showRefreshButton
-                  style={{
-                    height: "100%"
-                  }}
-                />
+              <div className="treeFolder">
 
-              </SandpackLayout>
+                <div className="folderRow">
+                  <FolderOpen size={15} />
+                  <span>src</span>
+                  <ChevronDown size={13} />
+                </div>
 
-            </SandpackProvider>
+                {fileList.map((file) => {
+
+                  const filename =
+                    file.replace("/", "");
+
+                  return (
+                    <button
+                      key={file}
+                      className={`fileRow ${
+                        activeFile === file
+                          ? "active"
+                          : ""
+                      }`}
+                      onClick={() =>
+                        setActiveFile(file)
+                      }
+                    >
+                      {fileIcon(file)}
+                      <span>{filename}</span>
+                    </button>
+                  );
+                })}
+
+              </div>
+
+            </div>
+
+
+            <div className="codeArea">
+
+              <SandpackProvider
+                template="react"
+                files={files}
+                theme="dark"
+                options={{
+                  activeFile,
+                  visibleFiles: fileList
+                }}
+              >
+
+                <SandpackLayout>
+
+                  <SandpackCodeEditor
+                    showTabs
+                    showLineNumbers
+                    showInlineErrors
+                    wrapContent
+                    closableTabs={false}
+                    style={{
+                      height: "100%",
+                      width: "100%"
+                    }}
+                  />
+
+                </SandpackLayout>
+
+              </SandpackProvider>
+
+            </div>
 
           </div>
 
         </section>
 
-      </main>
+
+        {/* RIGHT PREVIEW */}
+        <section className="previewPanel">
+
+          <div className="panelHeader">
+
+            <div className="panelHeading">
+              <Eye size={15} />
+              Preview
+
+              <span className="liveBadge">
+                <span></span>
+                Live
+              </span>
+            </div>
+
+
+            <div className="previewControls">
+
+              <button
+                className={
+                  previewMode === "desktop"
+                    ? "selected"
+                    : ""
+                }
+                onClick={() =>
+                  setPreviewMode("desktop")
+                }
+              >
+                <Monitor size={14} />
+              </button>
+
+              <button
+                className={
+                  previewMode === "tablet"
+                    ? "selected"
+                    : ""
+                }
+                onClick={() =>
+                  setPreviewMode("tablet")
+                }
+              >
+                <Tablet size={14} />
+              </button>
+
+              <button
+                className={
+                  previewMode === "mobile"
+                    ? "selected"
+                    : ""
+                }
+                onClick={() =>
+                  setPreviewMode("mobile")
+                }
+              >
+                <Smartphone size={14} />
+              </button>
+
+              <button
+                onClick={() =>
+                  window.location.reload()
+                }
+              >
+                <RefreshCw size={14} />
+              </button>
+
+            </div>
+
+          </div>
+
+
+          <div className="previewWorkspace">
+
+            <div
+              className={`previewFrame ${previewMode}`}
+            >
+
+              <SandpackProvider
+                template="react"
+                files={files}
+                theme="dark"
+                options={{
+                  activeFile: "/App.js",
+                  visibleFiles: fileList
+                }}
+              >
+
+                <SandpackLayout>
+
+                  <SandpackPreview
+                    showOpenInCodeSandbox={false}
+                    showRefreshButton
+                    style={{
+                      height: "100%",
+                      width: "100%"
+                    }}
+                  />
+
+                </SandpackLayout>
+
+              </SandpackProvider>
+
+            </div>
+
+          </div>
+
+        </section>
+
+      </div>
+
+
+      {/* MOBILE DRAWER */}
+      {mobileMenu && (
+        <div className="mobileOverlay">
+
+          <div className="mobileDrawer">
+
+            <div className="drawerHeader">
+              <strong>NEXUS AI</strong>
+
+              <button
+                onClick={() =>
+                  setMobileMenu(false)
+                }
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="drawerContent">
+
+              <button
+                onClick={() => {
+                  resetProject();
+                  setMobileMenu(false);
+                }}
+              >
+                <RotateCcw size={16} />
+                Reset project
+              </button>
+
+              <button
+                onClick={() => {
+                  setSidebarOpen(true);
+                  setMobileMenu(false);
+                }}
+              >
+                <MessageSquare size={16} />
+                Assistant
+              </button>
+
+            </div>
+
+          </div>
+
+        </div>
+      )}
 
     </div>
   );
