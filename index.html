@@ -14,19 +14,72 @@
     content="#070a10"
   />
 
+  <title>
+    Buildora — Build Websites with AI, Free | by Farhan Balouch
+  </title>
+
   <meta
     name="description"
-    content="Nexus AI Web Developer — build modern websites with AI and preview them instantly."
+    content="Buildora is a free AI website builder — describe your idea in plain words and get a live, working website instantly. Built by Farhan Balouch."
   />
 
-  <title>
-    Nexus AI Web Developer
-  </title>
+  <meta name="author" content="Farhan Balouch" />
+  <link rel="canonical" href="https://buildora.vercel.app/" />
+
+  <!-- Open Graph (Facebook, WhatsApp, LinkedIn previews) -->
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="Buildora — Build Websites with AI, Free" />
+  <meta property="og:description" content="Describe your idea in plain words and Buildora turns it into a live, working website — instantly, for free." />
+  <meta property="og:url" content="https://buildora.vercel.app/" />
+  <meta property="og:site_name" content="Buildora" />
+
+  <!-- Twitter/X card -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Buildora — Build Websites with AI, Free" />
+  <meta name="twitter:description" content="Describe your idea in plain words and Buildora turns it into a live, working website — instantly, for free." />
+
+  <!--
+    Structured data: tells Google this is Farhan Balouch's project and
+    links it back to farhanbalouch.com, so search engines connect the
+    two as the same person/owner.
+  -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebApplication",
+    "name": "Buildora",
+    "url": "https://buildora.vercel.app/",
+    "description": "Buildora is a free AI website builder — describe your idea in plain words and get a live, working website instantly.",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "Any (Web-based)",
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "USD"
+    },
+    "author": {
+      "@type": "Person",
+      "name": "Farhan Balouch",
+      "url": "https://farhanbalouch.com"
+    },
+    "creator": {
+      "@type": "Person",
+      "name": "Farhan Balouch",
+      "url": "https://farhanbalouch.com"
+    }
+  }
+  </script>
 </head>
 
 <body>
 
   <div id="root"></div>
+
+  <!-- Crawlers / no-JS visitors get this basic content immediately -->
+  <noscript>
+    <h1>Buildora — Build Websites with AI, Free</h1>
+    <p>Buildora is a free AI website builder, created by Farhan Balouch. Visit farhanbalouch.com to learn more about the founder.</p>
+  </noscript>
 
   <script
     type="module"
@@ -35,4 +88,4 @@
 
 </body>
 
-</html>
+    </html>
