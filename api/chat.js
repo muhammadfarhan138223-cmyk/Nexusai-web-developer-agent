@@ -1,31 +1,46 @@
 const SYSTEM_PROMPT = `
 You are Nexus AI Web Developer.
 
-You are an AI coding agent that helps users build websites.
+You are an AI coding agent that creates and edits websites.
 
-The user sends a request and the current project files.
+The user sends:
+1. A website request.
+2. The current project files.
 
-Return ONLY valid JSON in exactly this format:
+Your job is to generate the requested website or modify the existing website.
+
+RETURN ONLY VALID JSON.
+
+Required format:
 
 {
-  "message": "short explanation of what you changed",
+  "message": "Short explanation of what you changed.",
   "files": {
-    "/App.js": "complete file contents",
-    "/styles.css": "complete file contents"
+    "/App.js": "COMPLETE FILE CONTENT",
+    "/styles.css": "COMPLETE FILE CONTENT"
   }
 }
 
-IMPORTANT:
-- Always return complete file contents.
-- Never return markdown.
-- Never wrap JSON in code fences.
-- Keep React code valid.
-- Use React and plain CSS.
-- Do not invent missing project files.
-- If the user asks to create a website, actually create the website code.
+STRICT RULES:
+
+- Return JSON only.
+- Never use markdown.
+- Never use code fences.
+- Never put explanations outside JSON.
+- Always provide complete /App.js content.
+- Always provide complete /styles.css content.
+- Use React.
+- Use plain CSS.
+- Keep the code valid and runnable in Sandpack.
+- Do not use external files that do not exist.
+- Do not leave TODO placeholders.
+- Actually build the website requested by the user.
+- Make the design professional, modern and responsive.
+- Preserve existing functionality unless the user asks to change it.
 `;
 
 export default async function handler(req, res) {
+  // Only POST is allowed
   if (req.method !== "POST") {
     return res.status(405).json({
       error: "Method not allowed"
@@ -33,9 +48,12 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { prompt, files = {} } = req.body || {};
+    const body = req.body || {};
 
-    if (!prompt || !prompt.trim()) {
+    const prompt = body.prompt;
+    const files = body.files || {};
+
+    if (!prompt || typeof prompt !== "string") {
       return res.status(400).json({
         error: "Please enter a website request."
       });
@@ -45,10 +63,15 @@ export default async function handler(req, res) {
 
     if (!apiKey) {
       return res.status(500).json({
-        error: "OPENROUTER_API_KEY is missing in Vercel."
+        error:
+          "OPENROUTER_API_KEY is missing. Add it in Vercel Environment Variables."
       });
     }
 
+    /*
+     * openrouter/free automatically chooses
+     * an available free model.
+     */
     const model =
       process.env.OPENROUTER_MODEL || "openrouter/free";
 
@@ -58,14 +81,16 @@ ${prompt}
 
 CURRENT PROJECT FILES:
 ${JSON.stringify(files, null, 2)}
+
+Remember:
+Return ONLY the required JSON object.
 `;
 
     const controller = new AbortController();
 
-    // Stop waiting forever if OpenRouter gets stuck.
     const timeout = setTimeout(() => {
       controller.abort();
-    }, 45000);
+    }, 40000);
 
     let response;
 
@@ -74,16 +99,21 @@ ${JSON.stringify(files, null, 2)}
         "https://openrouter.ai/api/v1/chat/completions",
         {
           method: "POST",
+
           headers: {
-            "Authorization": `Bearer ${apiKey}`,
+            Authorization: `Bearer ${apiKey}`,
             "Content-Type": "application/json",
+
             "HTTP-Referer":
               process.env.SITE_URL ||
               "https://nexusai-web-developer.vercel.app",
+
             "X-Title": "Nexus AI Web Developer"
           },
+
           body: JSON.stringify({
             model,
+
             messages: [
               {
                 role: "system",
@@ -94,9 +124,12 @@ ${JSON.stringify(files, null, 2)}
                 content: userMessage
               }
             ],
-            temperature: 0.2,
+
+            temperature: 0.1,
+
             max_tokens: 12000
           }),
+
           signal: controller.signal
         }
       );
@@ -104,20 +137,42 @@ ${JSON.stringify(files, null, 2)}
       clearTimeout(timeout);
     }
 
-    const data = await response.json();
+    /*
+     * Read response safely.
+     */
+    const rawText = await response.text();
 
+    let data;
+
+    try {
+      data = JSON.parse(rawText);
+    } catch {
+      return res.status(502).json({
+        error:
+          "OpenRouter returned an invalid response.",
+        raw: rawText.slice(0, 500)
+      });
+    }
+
+    /*
+     * OpenRouter/API error.
+     */
     if (!response.ok) {
       console.error("OpenRouter error:", data);
 
       return res.status(502).json({
         error:
           data?.error?.message ||
-          "OpenRouter could not generate a response.",
-        details: data?.error || null
+          data?.message ||
+          `OpenRouter request failed (${response.status}).`
       });
     }
 
-    const content = data?.choices?.[0]?.message?.content;
+    /*
+     * Get AI text.
+     */
+    const content =
+      data?.choices?.[0]?.message?.content;
 
     if (!content) {
       return res.status(502).json({
@@ -125,41 +180,109 @@ ${JSON.stringify(files, null, 2)}
       });
     }
 
-    let result;
+    /*
+     * Clean possible markdown fences.
+     */
+    let cleaned = content.trim();
 
-    try {
-      const cleaned = content
+    if (cleaned.startsWith("```")) {
+      cleaned = cleaned
         .replace(/^```json\s*/i, "")
         .replace(/^```\s*/i, "")
         .replace(/\s*```$/i, "")
         .trim();
+    }
 
+    /*
+     * Parse AI JSON.
+     */
+    let result;
+
+    try {
       result = JSON.parse(cleaned);
-    } catch (parseError) {
-      console.error("JSON parse error:", content);
+    } catch (error) {
+      console.error(
+        "AI JSON parse failed:",
+        cleaned
+      );
 
       return res.status(502).json({
-        error: "AI returned an invalid website response.",
-        raw: content.slice(0, 1000)
+        error:
+          "AI generated invalid website data. Please try again."
       });
     }
 
-    return res.status(200).json(result);
+    /*
+     * Validate required structure.
+     */
+    if (
+      !result ||
+      typeof result !== "object" ||
+      !result.files ||
+      typeof result.files !== "object"
+    ) {
+      return res.status(502).json({
+        error:
+          "AI response did not contain valid website files."
+      });
+    }
+
+    /*
+     * Make sure App.js exists.
+     */
+    if (
+      typeof result.files["/App.js"] !== "string"
+    ) {
+      return res.status(502).json({
+        error:
+          "AI response is missing /App.js."
+      });
+    }
+
+    /*
+     * Make sure styles.css exists.
+     */
+    if (
+      typeof result.files["/styles.css"] !== "string"
+    ) {
+      return res.status(502).json({
+        error:
+          "AI response is missing /styles.css."
+      });
+    }
+
+    /*
+     * Return clean response to frontend.
+     */
+    return res.status(200).json({
+      message:
+        typeof result.message === "string"
+          ? result.message
+          : "Website generated successfully.",
+
+      files: {
+        "/App.js": result.files["/App.js"],
+        "/styles.css": result.files["/styles.css"]
+      }
+    });
 
   } catch (error) {
-    console.error("Nexus AI error:", error);
+    console.error(
+      "Nexus AI backend error:",
+      error
+    );
 
     if (error?.name === "AbortError") {
       return res.status(504).json({
         error:
-          "AI response took too long. Please try again."
+          "AI took too long to respond. Please try again."
       });
     }
 
     return res.status(500).json({
       error:
         error?.message ||
-        "Something went wrong while generating the website."
+        "Nexus AI could not generate the website."
     });
   }
-  }
+}
