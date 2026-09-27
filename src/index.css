@@ -19,7 +19,6 @@ body {
     BlinkMacSystemFont,
     "Segoe UI",
     sans-serif;
-
   background: #070a10;
   color: #edf2f7;
   overflow: hidden;
@@ -39,13 +38,16 @@ button:disabled {
   opacity: 0.55;
 }
 
-/* APP */
+/* =========================================================
+   APP
+========================================================= */
 
 .appShell {
   width: 100%;
   height: 100vh;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
   background:
     radial-gradient(
       circle at 50% -30%,
@@ -55,17 +57,24 @@ button:disabled {
     #070a10;
 }
 
-/* TOPBAR */
+/* =========================================================
+   TOP BAR
+========================================================= */
 
 .topbar {
   height: 58px;
+  min-height: 58px;
   flex-shrink: 0;
+
   display: flex;
   align-items: center;
   justify-content: space-between;
+
   padding: 0 13px;
+
   border-bottom: 1px solid #1a2230;
-  background: rgba(8, 12, 19, 0.94);
+  background: rgba(8, 12, 19, 0.96);
+
   backdrop-filter: blur(16px);
 }
 
@@ -82,15 +91,19 @@ button:disabled {
 .nexusLogo {
   width: 31px;
   height: 31px;
+
   display: grid;
   place-items: center;
+
   border-radius: 9px;
+
   background:
     linear-gradient(
       135deg,
       #2563eb,
       #38bdf8
     );
+
   box-shadow:
     0 0 24px rgba(37, 99, 235, 0.25);
 }
@@ -109,16 +122,19 @@ button:disabled {
 
 .brandText small {
   display: block;
+  margin-top: 2px;
+
   color: #697589;
   font-size: 8px;
   letter-spacing: 1.7px;
-  margin-top: 2px;
 }
 
 .projectBadge {
   margin-left: 10px;
   padding-left: 13px;
+
   border-left: 1px solid #252d3b;
+
   color: #7d899b;
   font-size: 12px;
 }
@@ -131,18 +147,22 @@ button:disabled {
 .runButton,
 .avatarButton,
 .mobileIcon {
+  height: 33px;
+
   border: 1px solid #222c3c;
+  border-radius: 8px;
+
   color: #aeb8c8;
   background: #0d131d;
-  border-radius: 8px;
-  height: 33px;
 }
 
 .topButton {
   display: flex;
   align-items: center;
   gap: 6px;
+
   padding: 0 10px;
+
   font-size: 11px;
 }
 
@@ -150,15 +170,23 @@ button:disabled {
   display: flex;
   align-items: center;
   gap: 6px;
+
   padding: 0 12px;
+
   border-color: #2455a8;
   background: #10254b;
   color: #dbeafe;
 }
 
+.runButton:hover {
+  background: #163464;
+}
+
 .avatarButton {
   width: 33px;
+
   border-radius: 50%;
+
   background: #182234;
   color: #9ec5ff;
   font-weight: 700;
@@ -170,26 +198,40 @@ button:disabled {
   place-items: center;
 }
 
-/* WORKSPACE */
+/* =========================================================
+   WORKSPACE
+========================================================= */
 
 .workspace {
   flex: 1;
   min-height: 0;
+  min-width: 0;
+
   display: grid;
+
   grid-template-columns:
     minmax(280px, 330px)
     minmax(300px, 0.95fr)
     minmax(380px, 1.35fr);
+
+  overflow: hidden;
 }
 
-/* LEFT */
+/* =========================================================
+   LEFT PANEL
+========================================================= */
 
 .leftPanel {
   min-width: 0;
+  min-height: 0;
+
   display: flex;
   flex-direction: column;
+
   border-right: 1px solid #1a2230;
+
   background: #090d14;
+
   overflow: hidden;
 }
 
@@ -199,10 +241,14 @@ button:disabled {
 
 .chatTop {
   min-height: 65px;
+  flex-shrink: 0;
+
   padding: 0 14px;
+
   display: flex;
   align-items: center;
   justify-content: space-between;
+
   border-bottom: 1px solid #1a2230;
 }
 
@@ -210,6 +256,7 @@ button:disabled {
   display: flex;
   align-items: center;
   gap: 7px;
+
   font-size: 12px;
   font-weight: 650;
   color: #dce5f1;
@@ -217,6 +264,7 @@ button:disabled {
 
 .sectionSub {
   margin-top: 4px;
+
   color: #667387;
   font-size: 10px;
 }
@@ -224,23 +272,39 @@ button:disabled {
 .smallIcon {
   width: 29px;
   height: 29px;
+
   display: grid;
   place-items: center;
+
   border: 1px solid #202a39;
   border-radius: 7px;
+
   background: #0d131d;
   color: #8390a3;
 }
 
+.smallIcon:hover {
+  background: #131c29;
+  color: #c5d3e7;
+}
+
+/* =========================================================
+   CHAT
+========================================================= */
+
 .chatMessages {
   flex: 1;
+  min-height: 0;
+
   overflow-y: auto;
+
   padding: 16px 13px;
 }
 
 .chatMessage {
   display: flex;
   gap: 8px;
+
   margin-bottom: 16px;
 }
 
@@ -252,10 +316,14 @@ button:disabled {
   width: 25px;
   height: 25px;
   flex: 0 0 25px;
+
   display: grid;
   place-items: center;
+
   margin-top: 2px;
+
   border-radius: 7px;
+
   color: #7db5ff;
   background: #101c31;
   border: 1px solid #1e3559;
@@ -263,13 +331,19 @@ button:disabled {
 
 .messageBubble {
   max-width: 86%;
+
   padding: 10px 12px;
+
   border: 1px solid #202b3b;
   border-radius: 11px;
+
   background: #101620;
   color: #b9c4d4;
+
   font-size: 12px;
   line-height: 1.55;
+
+  word-break: break-word;
 }
 
 .chatMessage.user .messageBubble {
@@ -288,6 +362,7 @@ button:disabled {
   display: flex;
   align-items: center;
   gap: 8px;
+
   color: #9db9dc;
 }
 
@@ -301,12 +376,15 @@ button:disabled {
   }
 }
 
-/* SUGGESTIONS */
+/* =========================================================
+   SUGGESTIONS
+========================================================= */
 
 .suggestions {
   display: flex;
   flex-direction: column;
   gap: 7px;
+
   padding: 0 12px 10px;
 }
 
@@ -314,28 +392,42 @@ button:disabled {
   display: flex;
   align-items: center;
   gap: 8px;
+
   padding: 9px 10px;
+
   text-align: left;
+
   border: 1px solid #202a39;
   border-radius: 9px;
+
   color: #8996a9;
   background: #0d131d;
+
   font-size: 11px;
 }
 
 .suggestions button:hover {
   border-color: #31517d;
   color: #bcd4f3;
+  background: #111a27;
 }
 
-/* COMPOSER */
+/* =========================================================
+   COMPOSER
+========================================================= */
 
 .composer {
+  flex-shrink: 0;
+
   margin: 10px;
+
   border: 1px solid #263143;
   border-radius: 12px;
+
   background: #0c121b;
+
   overflow: hidden;
+
   box-shadow:
     0 12px 40px rgba(0, 0, 0, 0.16);
 }
@@ -347,12 +439,17 @@ button:disabled {
 .composer textarea {
   width: 100%;
   height: 75px;
+
   resize: none;
+
   border: 0;
   outline: 0;
+
   padding: 11px 12px;
+
   color: #e8eef7;
   background: transparent;
+
   font-size: 12px;
   line-height: 1.5;
 }
@@ -363,9 +460,11 @@ button:disabled {
 
 .composerBottom {
   min-height: 37px;
+
   display: flex;
   align-items: center;
   justify-content: space-between;
+
   padding: 0 7px 6px 11px;
 }
 
@@ -377,10 +476,13 @@ button:disabled {
 .sendButton {
   width: 29px;
   height: 29px;
+
   display: grid;
   place-items: center;
+
   border: 0;
   border-radius: 8px;
+
   color: white;
   background: #2563eb;
 }
@@ -389,41 +491,62 @@ button:disabled {
   background: #3474ee;
 }
 
-/* EXPAND */
+/* =========================================================
+   EXPAND SIDEBAR
+========================================================= */
 
 .expandSidebar {
   position: absolute;
+
   z-index: 20;
+
   left: 8px;
   bottom: 12px;
+
   width: 34px;
   height: 34px;
+
   display: grid;
   place-items: center;
+
   border: 1px solid #263143;
   border-radius: 9px;
+
   color: #a8b5c7;
   background: #101721;
 }
 
-/* EDITOR */
+/* =========================================================
+   EDITOR
+========================================================= */
 
 .editorPanel {
   min-width: 0;
+  min-height: 0;
+
   display: flex;
   flex-direction: column;
+
   border-right: 1px solid #1a2230;
+
   background: #080c13;
+
+  overflow: hidden;
 }
 
 .panelHeader {
   height: 43px;
+  min-height: 43px;
   flex-shrink: 0;
+
   display: flex;
   align-items: center;
   justify-content: space-between;
+
   padding: 0 11px;
+
   border-bottom: 1px solid #1a2230;
+
   background: #0b1018;
 }
 
@@ -431,7 +554,9 @@ button:disabled {
   display: flex;
   align-items: center;
   gap: 7px;
+
   color: #c6d0df;
+
   font-size: 11px;
   font-weight: 600;
 }
@@ -440,35 +565,57 @@ button:disabled {
   display: flex;
   align-items: center;
   gap: 5px;
+
   padding: 5px 8px;
+
   border: 1px solid #202b3a;
   border-radius: 6px;
+
   color: #8490a2;
   background: #0d131d;
+
   font-size: 9px;
+}
+
+.copyButton:hover {
+  color: #d4dfef;
+  background: #131c28;
 }
 
 .editorBody {
   flex: 1;
+  min-width: 0;
   min-height: 0;
+
   display: grid;
-  grid-template-columns: 135px 1fr;
+
+  grid-template-columns: 135px minmax(0, 1fr);
+
+  overflow: hidden;
 }
 
 .fileTree {
   min-width: 0;
+  min-height: 0;
+
   border-right: 1px solid #1a2230;
+
   background: #090e16;
+
   overflow-y: auto;
 }
 
 .treeHeader {
   height: 34px;
+
   padding: 0 9px;
+
   display: flex;
   align-items: center;
   justify-content: space-between;
+
   color: #526073;
+
   font-size: 8px;
   letter-spacing: 1px;
   font-weight: 700;
@@ -476,20 +623,30 @@ button:disabled {
 
 .treeHeader button {
   border: 0;
+
   color: #65758a;
   background: transparent;
+}
+
+.treeHeader button:hover {
+  color: #b9c7da;
 }
 
 .folderRow,
 .fileRow {
   width: 100%;
+
   display: flex;
   align-items: center;
   gap: 7px;
+
   border: 0;
+
   color: #78869a;
   background: transparent;
+
   font-size: 10px;
+
   text-align: left;
 }
 
@@ -512,41 +669,208 @@ button:disabled {
   background: #15233a;
 }
 
+/* =========================================================
+   SANDPACK EDITOR
+========================================================= */
+
 .codeArea {
   min-width: 0;
   min-height: 0;
+
+  height: 100%;
+
   overflow: hidden;
 }
 
 .codeArea .sp-layout {
+  width: 100% !important;
   height: 100% !important;
+
+  min-height: 0 !important;
+
+  display: flex !important;
+
   border: 0 !important;
   border-radius: 0 !important;
 }
 
 .codeArea .sp-stack {
+  width: 100% !important;
   height: 100% !important;
+
+  min-height: 0 !important;
+
+  display: flex !important;
+  flex-direction: column !important;
 }
 
-/* PREVIEW */
+.codeArea .sp-cm {
+  height: 100% !important;
+  min-height: 0 !important;
+}
+
+/* =========================================================
+   PREVIEW
+========================================================= */
 
 .previewPanel {
   min-width: 0;
+  min-height: 0;
+
   display: flex;
   flex-direction: column;
+
   background: #080b11;
+
+  overflow: hidden;
 }
+
+.previewWorkspace {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  padding: 17px;
+
+  overflow: hidden;
+
+  background:
+    radial-gradient(
+      circle at center,
+      rgba(38, 58, 89, 0.09),
+      transparent 50%
+    );
+}
+
+.previewFrame {
+  position: relative;
+
+  width: 100%;
+  height: 100%;
+
+  min-width: 0;
+  min-height: 0;
+
+  overflow: hidden;
+
+  border: 1px solid #202b3b;
+  border-radius: 11px;
+
+  background: #ffffff;
+
+  box-shadow:
+    0 22px 70px rgba(0, 0, 0, 0.3);
+
+  transition:
+    width 0.25s ease,
+    height 0.25s ease;
+}
+
+/* TABLET */
+
+.previewFrame.tablet {
+  width: 720px;
+  max-width: 100%;
+  height: 90%;
+}
+
+/* MOBILE */
+
+.previewFrame.mobile {
+  width: 390px;
+  max-width: 100%;
+  height: 82%;
+}
+
+/* =========================================================
+   CRITICAL SANDPACK PREVIEW FIX
+========================================================= */
+
+.previewFrame .sp-layout {
+  width: 100% !important;
+  height: 100% !important;
+
+  min-height: 0 !important;
+
+  display: flex !important;
+
+  border: 0 !important;
+  border-radius: 0 !important;
+
+  overflow: hidden !important;
+}
+
+.previewFrame .sp-stack {
+  width: 100% !important;
+  height: 100% !important;
+
+  min-height: 0 !important;
+
+  display: flex !important;
+  flex: 1 1 auto !important;
+
+  overflow: hidden !important;
+}
+
+.previewFrame .sp-preview {
+  width: 100% !important;
+  height: 100% !important;
+
+  min-height: 0 !important;
+
+  flex: 1 1 auto !important;
+
+  overflow: hidden !important;
+}
+
+.previewFrame .sp-preview-container {
+  width: 100% !important;
+  height: 100% !important;
+
+  min-height: 0 !important;
+
+  position: relative !important;
+
+  flex: 1 1 auto !important;
+
+  overflow: hidden !important;
+}
+
+.previewFrame iframe {
+  display: block !important;
+
+  width: 100% !important;
+  height: 100% !important;
+
+  min-height: 0 !important;
+
+  border: 0 !important;
+
+  background: #ffffff !important;
+}
+
+/* =========================================================
+   LIVE BADGE
+========================================================= */
 
 .liveBadge {
   display: inline-flex;
   align-items: center;
   gap: 5px;
+
   margin-left: 6px;
   padding: 3px 6px;
+
   border: 1px solid #20342d;
   border-radius: 999px;
+
   color: #73b99d;
   background: #0c1714;
+
   font-size: 8px;
   font-weight: 600;
 }
@@ -554,9 +878,13 @@ button:disabled {
 .liveBadge span {
   width: 5px;
   height: 5px;
+
   border-radius: 50%;
+
   background: #43c28c;
-  box-shadow: 0 0 7px rgba(67, 194, 140, 0.7);
+
+  box-shadow:
+    0 0 7px rgba(67, 194, 140, 0.7);
 }
 
 .previewControls {
@@ -568,10 +896,13 @@ button:disabled {
 .previewControls button {
   width: 26px;
   height: 26px;
+
   display: grid;
   place-items: center;
+
   border: 1px solid transparent;
   border-radius: 6px;
+
   color: #68768a;
   background: transparent;
 }
@@ -583,82 +914,39 @@ button:disabled {
   background: #111925;
 }
 
-.previewWorkspace {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 17px;
-  overflow: auto;
-  background:
-    radial-gradient(
-      circle at center,
-      rgba(38, 58, 89, 0.09),
-      transparent 50%
-    );
-}
-
-.previewFrame {
-  width: 100%;
-  height: 100%;
-  min-height: 400px;
-  overflow: hidden;
-  border: 1px solid #202b3b;
-  border-radius: 11px;
-  background: white;
-  box-shadow:
-    0 22px 70px rgba(0, 0, 0, 0.3);
-  transition:
-    width 0.25s ease,
-    height 0.25s ease;
-}
-
-.previewFrame.tablet {
-  width: 720px;
-  max-width: 100%;
-  height: 90%;
-}
-
-.previewFrame.mobile {
-  width: 390px;
-  max-width: 100%;
-  height: 82%;
-}
-
-.previewFrame .sp-layout {
-  height: 100% !important;
-  border: 0 !important;
-  border-radius: 0 !important;
-}
-
-.previewFrame .sp-stack {
-  height: 100% !important;
-}
-
-/* MOBILE DRAWER */
+/* =========================================================
+   MOBILE DRAWER
+========================================================= */
 
 .mobileOverlay {
   position: fixed;
   inset: 0;
+
   z-index: 100;
+
   background: rgba(0, 0, 0, 0.62);
+
   backdrop-filter: blur(4px);
 }
 
 .mobileDrawer {
   width: 280px;
   height: 100%;
+
   background: #0a0f17;
+
   border-right: 1px solid #202b3a;
 }
 
 .drawerHeader {
   height: 58px;
+
   padding: 0 15px;
+
   display: flex;
   align-items: center;
   justify-content: space-between;
+
   border-bottom: 1px solid #1d2736;
 }
 
@@ -669,6 +957,7 @@ button:disabled {
 
 .drawerHeader button {
   border: 0;
+
   color: #9aa7b8;
   background: transparent;
 }
@@ -679,20 +968,32 @@ button:disabled {
 
 .drawerContent button {
   width: 100%;
+
   display: flex;
   align-items: center;
   gap: 9px;
+
   margin-bottom: 7px;
   padding: 11px;
+
   border: 1px solid #202b3b;
   border-radius: 8px;
+
   color: #a9b6c7;
   background: #0e151f;
+
   text-align: left;
+
   font-size: 11px;
 }
 
-/* RESPONSIVE */
+.drawerContent button:hover {
+  background: #131c28;
+}
+
+/* =========================================================
+   RESPONSIVE
+========================================================= */
 
 @media (max-width: 1100px) {
   .workspace {
@@ -708,11 +1009,12 @@ button:disabled {
 
 @media (max-width: 720px) {
   body {
-    overflow: auto;
+    overflow: hidden;
   }
 
   .topbar {
     height: 55px;
+    min-height: 55px;
   }
 
   .mobileIcon {
@@ -730,7 +1032,10 @@ button:disabled {
 
   .workspace {
     height: calc(100vh - 55px);
+
     display: block;
+
+    overflow: hidden;
   }
 
   .leftPanel {
@@ -742,7 +1047,9 @@ button:disabled {
   }
 
   .previewPanel {
+    width: 100%;
     height: 100%;
+
     border: 0;
   }
 
@@ -751,6 +1058,23 @@ button:disabled {
   }
 
   .previewFrame {
-    min-height: 500px;
+    width: 100%;
+    height: 100%;
+
+    min-height: 0;
+
+    border-radius: 9px;
   }
+
+  .previewFrame.mobile {
+    width: 390px;
+    max-width: 100%;
+    height: 92%;
   }
+
+  .previewFrame.tablet {
+    width: 720px;
+    max-width: 100%;
+    height: 94%;
+  }
+    }
