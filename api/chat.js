@@ -53,6 +53,114 @@ function isSafePath(path) {
   );
 }
 
+// Order matters: first working provider is used.
+// Gemini first because it can output the most tokens (long multi-page sites).
+function getProviders() {
+  const orModels = (process.env.OPENROUTER_MODEL || "qwen/qwen3-coder:free")
+    .split(",").map((m) => m.trim()).filter(Boolean);
+  return [
+    {
+      name: "gemini",
+      key: process.env.GEMINI_API_KEY,
+      url: "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+      model: process.env.GEMINI_MODEL || "gemini-2.5-flash",
+      maxTokens: 32000
+    },
+    {
+      name: "openrouter",
+      key: process.env.OPENROUTER_API_KEY,
+      url: "https://openrouter.ai/api/v1/chat/completions",
+      model: orModels[0],
+      models: orModels,
+      maxTokens: 16000,
+      headers: {
+        "HTTP-Referer": process.env.SITE_URL || "https://buildora.vercel.app",
+        "X-Title": "Buildora"
+      }
+    },
+    {
+      name: "groq",
+      key: process.env.GROQ_API_KEY,
+      url: "https://api.groq.com/openai/v1/chat/completions",
+      model: process.env.GROQ_MODEL || "llama-3.3-70b-versatile",
+      maxTokens: 8000
+    }
+  ].filter((p) => p.key);
+}
+
+// One streaming call. Writes text to `res` as it arrives.
+// Returns { ok:false, message } if the provider failed before any output.
+async function streamOnce(p, messages, res, signal, state) {
+  const upstream = await fetch(p.url, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${p.key}`,
+      "Content-Type": "application/json",
+      ...(p.headers || {})
+    },
+    body: JSON.stringify({
+      model: p.model,
+      ...(p.models && p.models.length > 1 ? { models: p.models } : {}),
+      messages,
+      temperature: 0.2,
+      max_tokens: p.maxTokens,
+      stream: true
+    }),
+    signal
+  });
+
+  if (!upstream.ok || !upstream.body) {
+    const errText = await upstream.text().catch(() => "");
+    let message = `${p.name} failed (${upstream.status}).`;
+    try {
+      const j = JSON.parse(errText);
+      message = j?.error?.message || j?.[0]?.error?.message || message;
+    } catch {}
+    return { ok: false, message };
+  }
+
+  if (!state.started) {
+    res.status(200);
+    res.setHeader("Content-Type", "text/plain; charset=utf-8");
+    res.setHeader("Cache-Control", "no-cache, no-transform");
+    res.setHeader("X-Accel-Buffering", "no");
+    state.started = true;
+  }
+
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let text = "";
+  let finish = "";
+
+  for await (const chunk of upstream.body) {
+    buffer += decoder.decode(chunk, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() || "";
+
+    for (const line of lines) {
+      const t = line.trim();
+      if (!t.startsWith("data:")) continue;
+      const payload = t.slice(5).trim();
+      if (!payload || payload === "[DONE]") continue;
+
+      let json;
+      try { json = JSON.parse(payload); } catch { continue; }
+
+      if (json.error) {
+        return { ok: true, text, finish: "error", message: json.error.message };
+      }
+      const choice = json.choices?.[0];
+      const piece = choice?.delta?.content;
+      if (piece) {
+        text += piece;
+        res.write(piece);
+      }
+      if (choice?.finish_reason) finish = choice.finish_reason;
+    }
+  }
+  return { ok: true, text, finish };
+}
+
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
@@ -74,20 +182,12 @@ export default async function handler(req, res) {
       .json({ error: "Your request is too long. Please shorten it." });
   }
 
-  const apiKey = process.env.OPENROUTER_API_KEY;
-
-  if (!apiKey) {
+  const providers = getProviders();
+  if (providers.length === 0) {
     return res.status(500).json({
-      error: "OPENROUTER_API_KEY is missing. Add it in Vercel Environment Variables."
+      error: "No API key found. Add GEMINI_API_KEY, OPENROUTER_API_KEY or GROQ_API_KEY in Vercel."
     });
   }
-
-  // OPENROUTER_MODEL can hold several models, comma separated.
-  // If the first one is busy or rate-limited, OpenRouter tries the next.
-  const models = (process.env.OPENROUTER_MODEL || "qwen/qwen3-coder:free")
-    .split(",")
-    .map((m) => m.trim())
-    .filter(Boolean);
 
   const filesText = Object.entries(files)
     .filter(([p, c]) => isSafePath(p) && typeof c === "string")
@@ -126,94 +226,58 @@ Reply ONLY in the required tag format and end with <<<END>>>.`;
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 280000);
+  const state = { started: false };
+
+  const baseMessages = [
+    { role: "system", content: SYSTEM_PROMPT },
+    ...conversationMessages,
+    { role: "user", content: userMessage }
+  ];
 
   try {
-    const upstream = await fetch(
-      "https://openrouter.ai/api/v1/chat/completions",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-          "HTTP-Referer": process.env.SITE_URL || "https://buildora.vercel.app",
-          "X-Title": "Buildora"
-        },
-        body: JSON.stringify({
-          model: models[0],
-          ...(models.length > 1 ? { models } : {}),
-          messages: [
-            { role: "system", content: SYSTEM_PROMPT },
-            ...conversationMessages,
-            { role: "user", content: userMessage }
-          ],
-          temperature: 0.2,
-          max_tokens: 16000,
-          stream: true
-        }),
-        signal: controller.signal
-      }
-    );
+    // 1) Try providers in order until one starts answering.
+    let used = null;
+    let full = "";
+    let lastError = "";
+    let finish = "";
 
-    if (!upstream.ok || !upstream.body) {
-      const errText = await upstream.text().catch(() => "");
-      let message = `AI request failed (${upstream.status}).`;
+    for (const p of providers) {
       try {
-        message = JSON.parse(errText)?.error?.message || message;
-      } catch {
-        // keep default message
-      }
-      return res.status(502).json({ error: message });
-    }
-
-    // From here on we stream plain text to the browser.
-    res.status(200);
-    res.setHeader("Content-Type", "text/plain; charset=utf-8");
-    res.setHeader("Cache-Control", "no-cache, no-transform");
-    res.setHeader("X-Accel-Buffering", "no");
-
-    const decoder = new TextDecoder();
-    let buffer = "";
-    let truncated = false;
-
-    for await (const chunk of upstream.body) {
-      buffer += decoder.decode(chunk, { stream: true });
-
-      const lines = buffer.split("\n");
-      buffer = lines.pop() || "";
-
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed.startsWith("data:")) continue;
-
-        const payload = trimmed.slice(5).trim();
-        if (!payload || payload === "[DONE]") continue;
-
-        let json;
-        try {
-          json = JSON.parse(payload);
-        } catch {
-          continue;
-        }
-
-        if (json.error) {
-          res.write(
-            `\n<<<ERROR>>>${json.error.message || "The AI model failed."}`
-          );
-          clearTimeout(timeout);
-          return res.end();
-        }
-
-        const choice = json.choices?.[0];
-        const text = choice?.delta?.content;
-        if (text) res.write(text);
-        if (choice?.finish_reason === "length") truncated = true;
+        const r = await streamOnce(p, baseMessages, res, controller.signal, state);
+        if (!r.ok) { lastError = r.message; continue; }
+        used = p; full = r.text; finish = r.finish;
+        if (finish === "error" && !full) { lastError = r.message; used = null; continue; }
+        break;
+      } catch (e) {
+        if (e?.name === "AbortError") throw e;
+        lastError = e?.message || lastError;
       }
     }
 
-    if (truncated) {
-      res.write(
-        "\n<<<ERROR>>>The AI ran out of space before finishing. Ask for fewer pages at a time."
+    if (!used) {
+      clearTimeout(timeout);
+      return res.status(502).json({ error: lastError || "All AI providers failed." });
+    }
+
+    // 2) If the model got cut off (no <<<END>>>), ask it to continue. Up to 3 times.
+    for (let round = 0; round < 3 && !full.includes("<<<END>>>"); round++) {
+      const r = await streamOnce(
+        used,
+        [
+          ...baseMessages,
+          { role: "assistant", content: full },
+          {
+            role: "user",
+            content:
+              "Your reply was cut off. Continue EXACTLY from the last character. " +
+              "Do not repeat anything, do not restart the current file, do not add commentary. " +
+              "Finish the current file, then any remaining files, then DEPS, SUGGESTIONS and <<<END>>>."
+          }
+        ],
+        res, controller.signal, state
       );
+      if (!r.ok || !r.text) break;
+      full += r.text;
     }
 
     clearTimeout(timeout);
@@ -221,7 +285,6 @@ Reply ONLY in the required tag format and end with <<<END>>>.`;
   } catch (error) {
     clearTimeout(timeout);
     console.error("Buildora backend error:", error);
-
     const message =
       error?.name === "AbortError"
         ? "The AI took too long. Try a smaller request."
@@ -231,9 +294,6 @@ Reply ONLY in the required tag format and end with <<<END>>>.`;
       res.write(`\n<<<ERROR>>>${message}`);
       return res.end();
     }
-
-    return res.status(error?.name === "AbortError" ? 504 : 500).json({
-      error: message
-    });
+    return res.status(error?.name === "AbortError" ? 504 : 500).json({ error: message });
   }
-      }
+}
