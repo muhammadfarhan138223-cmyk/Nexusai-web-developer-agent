@@ -1,7 +1,6 @@
 import { useMemo, useState } from "react";
 import {
   ArrowUp,
-  Bot,
   ChevronDown,
   ChevronRight,
   Code2,
@@ -9,7 +8,6 @@ import {
   Eye,
   FileCode2,
   FileText,
-  Folder,
   FolderOpen,
   Loader2,
   Menu,
@@ -20,7 +18,6 @@ import {
   Plus,
   RefreshCw,
   RotateCcw,
-  Send,
   Sparkles,
   Tablet,
   Smartphone,
@@ -46,7 +43,7 @@ export default function App() {
       <section className="hero">
         <div className="badge">
           <span className="dot"></span>
-          Built with Nexus AI
+          Built with Buildora
         </div>
 
         <h1>
@@ -182,6 +179,7 @@ const starterMessage = {
   role: "assistant",
   text: "Welcome to Buildora. Describe the website you want to build and I'll generate the code for the live preview."
 };
+
 const faqs = [
   {
     q: "Is Buildora free to use?",
@@ -193,7 +191,7 @@ const faqs = [
   },
   {
     q: "What can I build with it?",
-    a: "Landing pages, portfolios, small business sites, SaaS-style pages, and more — anything that fits into a single-page React app."
+    a: "Landing pages, portfolios, small business sites, SaaS-style pages, and more — multi-file React projects with components, styles and a live preview."
   },
   {
     q: "Who built Buildora?",
@@ -204,9 +202,10 @@ const faqs = [
     a: "Your prompts and generated code are sent only to the AI model needed to build your site — nothing is sold or shared."
   }
 ];
+
 function App() {
   const [files, setFiles] = useState(starterFiles);
-  const [openFaq, setOpenFaq] = useState(null);
+  const [dependencies, setDependencies] = useState({});
   const [messages, setMessages] = useState([starterMessage]);
   const [prompt, setPrompt] = useState("");
   const [loading, setLoading] = useState(false);
@@ -215,11 +214,16 @@ function App() {
   const [mobileMenu, setMobileMenu] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [copied, setCopied] = useState(false);
+  const [openFaq, setOpenFaq] = useState(null);
 
   const fileList = useMemo(
     () => Object.keys(files),
     [files]
   );
+
+  // Forces Sandpack to reload when packages change,
+  // otherwise newly added packages may not get installed.
+  const depsKey = JSON.stringify(dependencies);
 
   const sendPrompt = async () => {
     const text = prompt.trim();
@@ -232,9 +236,8 @@ function App() {
       text
     };
 
-    // Snapshot of the conversation so far (before this new message),
-    // sent to the backend so follow-up edits have context beyond just
-    // the current file state.
+    // Conversation so far (before this new message), so follow-up
+    // edits have context beyond just the current file state.
     const historyForRequest = messages
       .filter((m) => !m.error)
       .map((m) => ({ role: m.role, text: m.text }));
@@ -251,7 +254,10 @@ function App() {
         },
         body: JSON.stringify({
           prompt: text,
-          files,
+          files: Object.fromEntries(
+            Object.entries(files).map(([path, f]) => [path, f.code])
+          ),
+          dependencies,
           history: historyForRequest
         })
       });
@@ -267,26 +273,35 @@ function App() {
       if (data.files) {
         const nextFiles = {};
 
-        Object.entries(data.files).forEach(
-          ([path, value]) => {
-            nextFiles[path] = {
-              code:
-                typeof value === "string"
-                  ? value
-                  : value.code || ""
-            };
-          }
-        );
+        Object.entries(data.files).forEach(([path, value]) => {
+          nextFiles[path] = {
+            code: typeof value === "string" ? value : value.code || ""
+          };
+        });
 
         if (Object.keys(nextFiles).length > 0) {
-          setFiles((prev) => ({
-            ...prev,
-            ...nextFiles
-          }));
+          setFiles((prev) => {
+            const merged = { ...prev, ...nextFiles };
 
-          if (nextFiles["/App.js"]) {
-            setActiveFile("/App.js");
+            (data.deleteFiles || []).forEach((path) => {
+              delete merged[path];
+            });
+
+            return merged;
+          });
+
+          if (
+            data.dependencies &&
+            Object.keys(data.dependencies).length > 0
+          ) {
+            setDependencies((prev) => ({
+              ...prev,
+              ...data.dependencies
+            }));
           }
+
+          const firstNew = Object.keys(nextFiles)[0];
+          setActiveFile(nextFiles["/App.js"] ? "/App.js" : firstNew);
         }
       }
 
@@ -319,6 +334,7 @@ function App() {
 
   const resetProject = () => {
     setFiles(starterFiles);
+    setDependencies({});
     setActiveFile("/App.js");
 
     setMessages([
@@ -660,9 +676,11 @@ function App() {
             <div className="codeArea">
 
               <SandpackProvider
+                key={depsKey}
                 template="react"
                 files={files}
                 theme="dark"
+                customSetup={{ dependencies }}
                 options={{
                   activeFile,
                   visibleFiles: fileList
@@ -771,9 +789,11 @@ function App() {
             >
 
               <SandpackProvider
+                key={depsKey}
                 template="react"
                 files={files}
                 theme="dark"
+                customSetup={{ dependencies }}
                 options={{
                   activeFile: "/App.js",
                   visibleFiles: fileList
