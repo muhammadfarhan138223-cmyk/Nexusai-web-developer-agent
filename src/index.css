@@ -1238,3 +1238,38 @@ button:disabled {
 .footerDot {
   opacity: 0.5;
 }
+.previewFrame {
+  position: relative;
+}
+
+.fixBar {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 12px;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  border: 1px solid #7f1d1d;
+  background: rgba(30, 10, 12, 0.96);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+}
+
+.fixBarText {
+  font-size: 13px;
+  color: #fca5a5;
+}
+
+.fixBarButton {
+  border: 0;
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #ffffff;
+  background: #2563eb;
+  }
