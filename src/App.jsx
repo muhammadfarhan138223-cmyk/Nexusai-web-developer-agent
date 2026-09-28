@@ -396,6 +396,81 @@ const faqs = [
     a: "Your prompts and generated code are sent only to the AI model needed to build your site — nothing is sold or shared."
   }
 ];
+const ALLOWED_EXT = [".js", ".jsx", ".css", ".json"];
+
+function isSafePath(p) {
+  return (
+    typeof p === "string" &&
+    p.startsWith("/") &&
+    !p.includes("..") &&
+    !p.includes("//") &&
+    p.length <= 120 &&
+    ALLOWED_EXT.some((e) => p.endsWith(e))
+  );
+}
+
+function isSafeDep(name) {
+  return (
+    typeof name === "string" &&
+    name.length <= 80 &&
+    /^(@[a-z0-9-~][a-z0-9-._~]*\/)?[a-z0-9-~][a-z0-9-._~]*$/.test(name)
+  );
+}
+
+function stripFences(code) {
+  return code
+    .replace(/^```[a-z]*\n/i, "")
+    .replace(/\n```\s*$/, "");
+}
+
+const TAG_RE =
+  /<<<(MESSAGE|FILE|DELETE|DEPS|SUGGESTIONS|END)(?: ([^>\n]+?))?>>>/g;
+
+function parseBuild(text) {
+  const out = {
+    message: "",
+    files: {},
+    deleteFiles: [],
+    dependencies: {},
+    suggestions: [],
+    complete: false
+  };
+
+  const marks = [...text.matchAll(TAG_RE)];
+
+  marks.forEach((m, i) => {
+    const kind = m[1];
+    const arg = (m[2] || "").trim();
+    const end = marks[i + 1] ? marks[i + 1].index : text.length;
+    const body = text
+      .slice(m.index + m[0].length, end)
+      .replace(/^\n/, "")
+      .replace(/\s+$/, "");
+
+    if (kind === "MESSAGE") out.message = body;
+    else if (kind === "FILE") {
+      if (isSafePath(arg) && body) out.files[arg] = stripFences(body);
+    } else if (kind === "DELETE") {
+      if (isSafePath(arg) && arg !== "/App.js") out.deleteFiles.push(arg);
+    } else if (kind === "DEPS") {
+      body
+        .split("\n")
+        .map((s) => s.trim())
+        .filter(isSafeDep)
+        .forEach((name) => {
+          out.dependencies[name] = "latest";
+        });
+    } else if (kind === "SUGGESTIONS") {
+      out.suggestions = body
+        .split("\n")
+        .map((s) => s.trim().slice(0, 80))
+        .filter(Boolean)
+        .slice(0, 3);
+    } else if (kind === "END") out.complete = true;
+  });
+
+  return out;
+}
 
 function App() {
   // Read the saved project once, on first load only.
@@ -461,11 +536,136 @@ function App() {
 
     if (!text || loading) return;
 
-    const userMessage = {
-      id: Date.now(),
-      role: "user",
-      text
-    };
+    const userMessage = { id: Date.now(), role: "user", text };
+
+    const historyForRequest = messages
+      .filter((m) => !m.error)
+      .map((m) => ({ role: m.role, text: m.text }));
+
+    setMessages((prev) => [...prev, userMessage]);
+    if (!isOverride) setPrompt("");
+    setLoading(true);
+
+    try {
+      const response = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prompt: text,
+          files: Object.fromEntries(
+            Object.entries(files).map(([path, f]) => [path, f.code])
+          ),
+          dependencies,
+          history: historyForRequest
+        })
+      });
+
+      if (!response.ok) {
+        const errRaw = await response.text();
+        let msg = "Server error. Please try again.";
+        try {
+          msg = JSON.parse(errRaw).error || msg;
+        } catch {
+          if (response.status === 504 || /timeout/i.test(errRaw)) {
+            msg = "The server stopped the request. Try a smaller change.";
+          }
+        }
+        throw new Error(msg);
+      }
+
+      // Read the streamed reply until it finishes.
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let raw = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        raw += decoder.decode(value, { stream: true });
+      }
+      raw += decoder.decode();
+
+      const errMatch = raw.match(/<<<ERROR>>>([\s\S]*)$/);
+      if (errMatch) throw new Error(errMatch[1].trim());
+
+      const data = parseBuild(raw);
+
+      if (!data.complete) {
+        throw new Error(
+          "The AI reply was cut off. Ask for fewer pages at a time."
+        );
+      }
+
+      if (Object.keys(data.files).length === 0) {
+        throw new Error("The AI did not return any files. Please try again.");
+      }
+
+      if (!data.files["/App.js"] && !files["/App.js"]) {
+        throw new Error("The AI response is missing /App.js.");
+      }
+
+      const changes = [];
+      const nextFiles = {};
+
+      Object.entries(data.files).forEach(([path, code]) => {
+        nextFiles[path] = { code };
+        changes.push({
+          path,
+          action: files[path] ? "updated" : "created"
+        });
+      });
+
+      data.deleteFiles.forEach((path) => {
+        if (files[path]) changes.push({ path, action: "deleted" });
+      });
+
+      setFiles((prev) => {
+        const merged = { ...prev, ...nextFiles };
+        data.deleteFiles.forEach((path) => {
+          delete merged[path];
+        });
+        return merged;
+      });
+
+      if (Object.keys(data.dependencies).length > 0) {
+        setDependencies((prev) => ({ ...prev, ...data.dependencies }));
+      }
+
+      const firstNew = Object.keys(nextFiles)[0];
+      setActiveFile(nextFiles["/App.js"] ? "/App.js" : firstNew);
+
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: Date.now() + 1,
+          role: "assistant",
+          animate: true,
+          text:
+            data.message || "Done. I've updated the project preview.",
+          changes,
+          packages: Object.keys(data.dependencies),
+          suggestions: data.suggestions
+        }
+      ]);
+    } catch (error) {
+      const networkFail =
+        error instanceof TypeError || /failed to fetch/i.test(error.message);
+
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: Date.now() + 1,
+          role: "assistant",
+          error: true,
+          text: networkFail
+            ? "Connection toot gaya. Dobara try karo, ya request chhoti karo."
+            : error.message || "Unable to connect to the AI backend."
+        }
+      ]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
     // Conversation so far (before this new message), so follow-up
     // edits have context beyond just the current file state.
