@@ -21,7 +21,7 @@ const CHAIN = [
     name: "groq",
     keyEnv: "GROQ_API_KEY",
     url: "https://api.groq.com/openai/v1/chat/completions",
-    models: ["llama-3.3-70b-versatile"],
+    models: ["openai/gpt-oss-120b"],
     maxTokens: 8000
   }
 ];
@@ -333,17 +333,17 @@ Reply ONLY in the required tag format and end with <<<END>>>.`;
 
     let used = null;
     let full = "";
-    let lastError = "";
+    const errors = [];
 
     for (const p of providers) {
       try {
         const r = await streamOnce(p, baseMessages, res, controller.signal, state);
         if (!r.ok) {
-          lastError = r.message;
+          errors.push(`${p.name}: ${r.message}`);
           continue;
         }
         if (r.finish === "error" && !r.text) {
-          lastError = r.message;
+          errors.push(`${p.name}: ${r.message}`);
           continue;
         }
         used = p;
@@ -354,15 +354,16 @@ Reply ONLY in the required tag format and end with <<<END>>>.`;
         break;
       } catch (e) {
         if (e?.name === "AbortError") throw e;
-        lastError = e?.message || lastError;
+        errors.push(`${p.name}: ${e?.message || "request failed"}`);
       }
     }
 
     if (!used) {
       clearTimeout(timeout);
-      return res
-        .status(502)
-        .json({ error: lastError || "All AI providers failed." });
+      console.error("[Buildora] all providers failed:", errors);
+      return res.status(502).json({
+        error: errors.length ? errors.join(" | ") : "All AI providers failed."
+      });
     }
 
     // Cut off? Ask the same model to continue (up to 3 times).
