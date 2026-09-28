@@ -682,8 +682,9 @@ function App() {
                 theme="dark"
                 customSetup={{ dependencies }}
                 options={{
-                  activeFile,
-                  visibleFiles: fileList
+                  activeFile: "/App.js",
+                  visibleFiles: fileList,
+                  bundlerTimeOut: 120000
                 }}
               >
 
