@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowUp,
+  Check,
   ChevronDown,
   ChevronRight,
   Code2,
@@ -183,6 +184,14 @@ const starterMessage = {
 
 const STORAGE_KEY = "buildora_project_v1";
 
+const GENERATION_STEPS = [
+  "Understanding your idea",
+  "Planning pages and components",
+  "Writing the code",
+  "Styling and polishing the design",
+  "Final checks — almost ready"
+];
+
 // Loads the last saved project from this browser, if any and valid.
 function loadSavedProject() {
   try {
@@ -204,6 +213,137 @@ function loadSavedProject() {
   }
 
   return null;
+}
+
+// Types the assistant's reply out letter by letter (newest message only).
+function TypedText({ text, animate }) {
+  const [shown, setShown] = useState(animate ? 0 : text.length);
+
+  useEffect(() => {
+    if (!animate) {
+      setShown(text.length);
+      return undefined;
+    }
+
+    setShown(0);
+
+    const step = Math.max(1, Math.ceil(text.length / 90));
+
+    const id = setInterval(() => {
+      setShown((n) => {
+        if (n >= text.length) {
+          clearInterval(id);
+          return n;
+        }
+        return Math.min(text.length, n + step);
+      });
+    }, 22);
+
+    return () => clearInterval(id);
+  }, [text, animate]);
+
+  return (
+    <>
+      {text.slice(0, shown)}
+      {animate && shown < text.length && (
+        <span className="typingCaret" />
+      )}
+    </>
+  );
+}
+
+// Live progress shown while the AI is generating.
+function GeneratingSteps() {
+  const [seconds, setSeconds] = useState(0);
+
+  useEffect(() => {
+    const id = setInterval(() => setSeconds((s) => s + 1), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  const active = Math.min(
+    GENERATION_STEPS.length - 1,
+    Math.floor(seconds / 6)
+  );
+
+  return (
+    <div className="genSteps">
+      <div className="genHeader">
+        <Loader2 size={14} className="spin" />
+        <span>Buildora is working on it</span>
+        <span className="genTimer">{seconds}s</span>
+      </div>
+
+      <ul>
+        {GENERATION_STEPS.map((label, i) => (
+          <li
+            key={label}
+            className={
+              i < active ? "done" : i === active ? "active" : ""
+            }
+          >
+            {i < active ? (
+              <Check size={13} />
+            ) : i === active ? (
+              <Loader2 size={13} className="spin" />
+            ) : (
+              <span className="stepDot" />
+            )}
+            {label}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+// Shows which files were created / updated / removed by a reply.
+function ChangesCard({ changes, packages, onOpen }) {
+  const hasChanges = changes && changes.length > 0;
+  const hasPackages = packages && packages.length > 0;
+
+  if (!hasChanges && !hasPackages) return null;
+
+  const labels = {
+    created: "New",
+    updated: "Updated",
+    deleted: "Removed"
+  };
+
+  return (
+    <div className="changesCard">
+      {hasChanges && (
+        <>
+          <div className="changesTitle">
+            <FileCode2 size={13} />
+            {changes.length} file{changes.length === 1 ? "" : "s"} changed
+          </div>
+
+          {changes.map((c) => (
+            <button
+              key={`${c.path}-${c.action}`}
+              className="changeRow"
+              disabled={c.action === "deleted"}
+              onClick={() => onOpen(c.path)}
+            >
+              <span className="changePath">
+                {c.path.replace(/^\//, "")}
+              </span>
+              <span className={`changeBadge ${c.action}`}>
+                {labels[c.action]}
+              </span>
+            </button>
+          ))}
+        </>
+      )}
+
+      {hasPackages && (
+        <div className="changesDeps">
+          Added packages: {packages.join(", ")}
+        </div>
+      )}
+    </div>
+  );
 }
 
 // Shown at the bottom of the preview when the generated code has an error.
@@ -277,6 +417,7 @@ function App() {
   const [copied, setCopied] = useState(false);
   const [openFaq, setOpenFaq] = useState(null);
   const [previewKey, setPreviewKey] = useState(0);
+  const chatEndRef = useRef(null);
 
   const fileList = useMemo(
     () => Object.keys(files),
@@ -296,13 +437,23 @@ function App() {
         JSON.stringify({
           files,
           dependencies,
-          messages: messages.slice(-30)
+          messages: messages
+            .slice(-30)
+            .map(({ animate, ...rest }) => rest)
         })
       );
     } catch {
       // Storage full or blocked — saving is a bonus, never fatal.
     }
   }, [files, dependencies, messages]);
+
+  // Keep the newest chat message in view.
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({
+      behavior: "smooth",
+      block: "end"
+    });
+  }, [messages, loading]);
 
   const sendPrompt = async (overrideText) => {
     const isOverride = typeof overrideText === "string";
@@ -325,7 +476,7 @@ function App() {
     setMessages((prev) => [...prev, userMessage]);
 
     // Keep whatever the user was typing when this is an automatic
-    // "Fix with AI" request.
+    // request (Fix with AI / suggestion button).
     if (!isOverride) {
       setPrompt("");
     }
@@ -348,13 +499,28 @@ function App() {
         })
       });
 
-      const data = await response.json();
+      // Read as text first: if the server timed out, Vercel sends plain
+      // text instead of JSON, which used to crash with a confusing error.
+      const raw = await response.text();
+      let data;
+
+      try {
+        data = JSON.parse(raw);
+      } catch {
+        throw new Error(
+          response.status === 504 || /timeout|error occurred/i.test(raw)
+            ? "The AI took too long and the server stopped it. Please try again, or ask for a smaller change."
+            : "The server sent an unexpected reply. Please try again."
+        );
+      }
 
       if (!response.ok) {
         throw new Error(
           data.error || "Something went wrong."
         );
       }
+
+      const changes = [];
 
       if (data.files) {
         const nextFiles = {};
@@ -363,6 +529,17 @@ function App() {
           nextFiles[path] = {
             code: typeof value === "string" ? value : value.code || ""
           };
+
+          changes.push({
+            path,
+            action: files[path] ? "updated" : "created"
+          });
+        });
+
+        (data.deleteFiles || []).forEach((path) => {
+          if (files[path]) {
+            changes.push({ path, action: "deleted" });
+          }
         });
 
         if (Object.keys(nextFiles).length > 0) {
@@ -396,9 +573,13 @@ function App() {
         {
           id: Date.now() + 1,
           role: "assistant",
+          animate: true,
           text:
             data.message ||
-            "Done. I've updated the project preview."
+            "Done. I've updated the project preview.",
+          changes,
+          packages: Object.keys(data.dependencies || {}),
+          suggestions: data.suggestions || []
         }
       ]);
     } catch (error) {
@@ -554,34 +735,71 @@ function App() {
           {/* CHAT */}
           <div className="chatMessages">
 
-            {messages.map((message) => (
+            {messages.map((message, index) => {
+              const isLast = index === messages.length - 1;
 
-              <div
-                key={message.id}
-                className={`chatMessage ${message.role}`}
-              >
-
-                {message.role === "assistant" && (
-                  <div className="messageAvatar">
-                    {message.error ? (
-                      <Zap size={14} />
-                    ) : (
-                      <Sparkles size={14} />
-                    )}
-                  </div>
-                )}
-
+              return (
                 <div
-                  className={`messageBubble ${
-                    message.error ? "error" : ""
-                  }`}
+                  key={message.id}
+                  className={`chatMessage ${message.role}`}
                 >
-                  {message.text}
+
+                  {message.role === "assistant" && (
+                    <div className="messageAvatar">
+                      {message.error ? (
+                        <Zap size={14} />
+                      ) : (
+                        <Sparkles size={14} />
+                      )}
+                    </div>
+                  )}
+
+                  {message.role === "assistant" ? (
+                    <div className="messageColumn">
+
+                      <div
+                        className={`messageBubble ${
+                          message.error ? "error" : ""
+                        }`}
+                      >
+                        <TypedText
+                          text={message.text}
+                          animate={!!message.animate && isLast}
+                        />
+                      </div>
+
+                      <ChangesCard
+                        changes={message.changes}
+                        packages={message.packages}
+                        onOpen={setActiveFile}
+                      />
+
+                      {isLast &&
+                        !loading &&
+                        message.suggestions?.length > 0 && (
+                          <div className="followUps">
+                            {message.suggestions.map((s) => (
+                              <button
+                                key={s}
+                                onClick={() => sendPrompt(s)}
+                              >
+                                <Sparkles size={12} />
+                                {s}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+
+                    </div>
+                  ) : (
+                    <div className="messageBubble">
+                      {message.text}
+                    </div>
+                  )}
+
                 </div>
-
-              </div>
-
-            ))}
+              );
+            })}
 
             {loading && (
               <div className="chatMessage assistant">
@@ -590,19 +808,16 @@ function App() {
                   <Sparkles size={14} />
                 </div>
 
-                <div className="messageBubble generating">
-
-                  <Loader2
-                    size={15}
-                    className="spin"
-                  />
-
-                  Generating your website...
-
+                <div className="messageColumn">
+                  <div className="messageBubble">
+                    <GeneratingSteps />
+                  </div>
                 </div>
 
               </div>
             )}
+
+            <div ref={chatEndRef} />
 
           </div>
 
@@ -771,7 +986,7 @@ function App() {
             <div className="codeArea">
 
               <SandpackProvider
-                key={providerKey}
+                key={`${providerKey}-${activeFile}`}
                 template="react"
                 files={files}
                 theme="dark"
