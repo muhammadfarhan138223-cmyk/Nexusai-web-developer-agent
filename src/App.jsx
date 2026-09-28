@@ -182,9 +182,31 @@ const starterMessage = {
   role: "assistant",
   text: "Welcome to Buildora. Describe the website you want to build and I'll generate the code for the live preview."
 };
-
+const faqs = [
+  {
+    q: "Is Buildora free to use?",
+    a: "Yes. Buildora runs on a free AI model, so there's no cost to describe your idea and get a working website preview."
+  },
+  {
+    q: "Do I need to know how to code?",
+    a: "No. Just describe what you want in plain English (or Roman Urdu/Hindi) and Buildora writes the React and CSS code for you, with a live preview."
+  },
+  {
+    q: "What can I build with it?",
+    a: "Landing pages, portfolios, small business sites, SaaS-style pages, and more — anything that fits into a single-page React app."
+  },
+  {
+    q: "Who built Buildora?",
+    a: "Buildora was built by Farhan Balouch, a developer and entrepreneur from Ahmadpur East, Pakistan, working in AI, SEO, and online business."
+  },
+  {
+    q: "Is my data safe?",
+    a: "Your prompts and generated code are sent only to the AI model needed to build your site — nothing is sold or shared."
+  }
+];
 function App() {
   const [files, setFiles] = useState(starterFiles);
+  const [openFaq, setOpenFaq] = useState(null);
   const [messages, setMessages] = useState([starterMessage]);
   const [prompt, setPrompt] = useState("");
   const [loading, setLoading] = useState(false);
@@ -331,6 +353,7 @@ function App() {
   };
 
   return (
+    <>
     <div className="appShell">
 
       {/* TOP BAR */}
@@ -829,6 +852,77 @@ function App() {
       )}
 
     </div>
+
+    <footer className="siteFooter">
+
+      <div className="footerInner">
+
+        <section className="founderBlock">
+          <div className="founderAvatar">FB</div>
+          <div>
+            <h2>Built by Farhan Balouch</h2>
+            <p>
+              Buildora is an independent project by{" "}
+              <strong>Farhan Balouch</strong>, a developer and
+              entrepreneur from Ahmadpur East, Pakistan, working in AI,
+              SEO, and online business. Buildora is part of his ongoing
+              work exploring what AI can build.
+            </p>
+            <a
+              href="https://farhanbalouch.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="founderLink"
+            >
+              farhanbalouch.com
+              <ChevronRight size={14} />
+            </a>
+          </div>
+        </section>
+
+        <section className="faqBlock">
+          <h2>Frequently asked questions</h2>
+
+          <div className="faqList">
+            {faqs.map((item, i) => {
+              const open = openFaq === i;
+              return (
+                <div key={item.q} className={`faqItem ${open ? "open" : ""}`}>
+                  <button
+                    className="faqQuestion"
+                    onClick={() => setOpenFaq(open ? null : i)}
+                  >
+                    <span>{item.q}</span>
+                    <ChevronDown
+                      size={16}
+                      className={`faqChevron ${open ? "rotated" : ""}`}
+                    />
+                  </button>
+                  {open && (
+                    <p className="faqAnswer">{item.a}</p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </section>
+
+      </div>
+
+      <div className="footerBottom">
+        <span>© {new Date().getFullYear()} Buildora</span>
+        <span className="footerDot">•</span>
+        <a
+          href="https://farhanbalouch.com"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          A project by Farhan Balouch
+        </a>
+      </div>
+
+    </footer>
+    </>
   );
 }
 
