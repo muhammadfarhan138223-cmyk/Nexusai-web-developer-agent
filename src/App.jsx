@@ -29,7 +29,8 @@ import {
   SandpackCodeEditor,
   SandpackLayout,
   SandpackPreview,
-  SandpackProvider
+  SandpackProvider,
+  useSandpack
 } from "@codesandbox/sandpack-react";
 
 const starterFiles = {
@@ -179,7 +180,32 @@ const starterMessage = {
   role: "assistant",
   text: "Welcome to Buildora. Describe the website you want to build and I'll generate the code for the live preview."
 };
+function ErrorFixer({ onFix, loading }) {
+  const { sandpack } = useSandpack();
+  const error = sandpack.error;
 
+  if (!error) return null;
+
+  const cleanMessage = String(error.message || "Unknown error").slice(0, 1500);
+
+  return (
+    <div className="fixBar">
+      <span className="fixBarText">Preview has an error</span>
+      <button
+        className="fixBarButton"
+        disabled={loading}
+        onClick={() =>
+          onFix(
+            "The live preview shows this error. Fix it and return the corrected COMPLETE file(s):\n\n" +
+              cleanMessage
+          )
+        }
+      >
+        {loading ? "Fixing..." : "Fix with AI"}
+      </button>
+    </div>
+  );
+    }
 const faqs = [
   {
     q: "Is Buildora free to use?",
@@ -225,8 +251,10 @@ function App() {
   // otherwise newly added packages may not get installed.
   const depsKey = JSON.stringify(dependencies);
 
-  const sendPrompt = async () => {
-    const text = prompt.trim();
+  const sendPrompt = async (overrideText) => {
+    const text = (
+      typeof overrideText === "string" ? overrideText : prompt
+    ).trim();
 
     if (!text || loading) return;
 
