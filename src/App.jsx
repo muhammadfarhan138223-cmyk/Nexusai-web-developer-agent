@@ -592,6 +592,12 @@ function App() {
         throw new Error(msg);
       }
 
+      const modelUsed =
+        (response.headers.get("X-Model-Provider") || "") +
+        (response.headers.get("X-Model-Name")
+          ? " / " + response.headers.get("X-Model-Name")
+          : "");
+
       // Read the streamed reply until it finishes.
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
@@ -662,6 +668,7 @@ function App() {
           text: data.message || "Done. I've updated the project preview.",
           changes,
           packages: Object.keys(data.dependencies),
+          model: modelUsed,
           suggestions: data.suggestions
         }
       ]);
@@ -826,6 +833,18 @@ function App() {
                             animate={!!message.animate && isLast}
                           />
                         </div>
+
+                        {message.model && (
+                          <div
+                            style={{
+                              fontSize: 11,
+                              opacity: 0.55,
+                              margin: "4px 2px 0"
+                            }}
+                          >
+                            Model: {message.model}
+                          </div>
+                        )}
 
                         <ChangesCard
                           changes={message.changes}
