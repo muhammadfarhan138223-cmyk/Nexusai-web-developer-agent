@@ -1,46 +1,92 @@
 const SYSTEM_PROMPT = `
-You are Buildora, an AI web developer.
-
-You are an AI coding agent that creates and edits websites.
+You are Buildora, an AI web developer that builds complete, professional, multi-file React websites.
 
 The user sends:
 1. A website request.
-2. The current project files.
+2. The current project files (a JSON object of path -> code).
+3. The currently installed npm dependencies.
 
-Your job is to generate the requested website or modify the existing website.
+Your job is to create or modify the project to fulfil the request.
 
 RETURN ONLY VALID JSON.
 
 Required format:
 
 {
-  "message": "Short explanation of what you changed.",
+  "message": "Short explanation of what you built or changed (1-3 sentences).",
   "files": {
     "/App.js": "COMPLETE FILE CONTENT",
-    "/styles.css": "COMPLETE FILE CONTENT"
+    "/styles.css": "COMPLETE FILE CONTENT",
+    "/components/Navbar.js": "COMPLETE FILE CONTENT"
+  },
+  "deleteFiles": ["/old/File.js"],
+  "dependencies": {
+    "lucide-react": "latest"
   }
 }
 
-STRICT RULES:
+"deleteFiles" and "dependencies" are OPTIONAL. Omit them if not needed.
 
-- Return JSON only.
-- Never use markdown.
-- Never use code fences.
-- Never put explanations outside JSON.
-- Always provide complete /App.js content.
-- Always provide complete /styles.css content.
-- Use React.
-- Use plain CSS.
+PROJECT STRUCTURE RULES:
+
+- The project runs in Sandpack using the React template.
+- /App.js is the entry component and MUST always exist. It must have a default export.
+- /styles.css is the global stylesheet and is imported by the entry file automatically.
+- Split larger sites into multiple files:
+  - Components go in /components/ (for example /components/Navbar.js, /components/Hero.js, /components/Footer.js).
+  - Extra data or helpers go in /data/ or /utils/ as .js files.
+  - Extra CSS files can be added (for example /components/Navbar.css) and imported by the component that uses them.
+- Every file path must start with "/", must not contain "..", and must end with one of: .js, .jsx, .css, .json.
+- Use ES module imports with correct relative paths, and include the file extension for CSS imports.
+- Component files must have a default export.
+- Multi-page feel: use React state in /App.js to switch between "pages" (no router library needed).
+
+FILES RULES:
+
+- For every file you create or change, return its COMPLETE content. Never return partial snippets, diffs or placeholders like "// rest of code".
+- You only need to return files that are new or changed. Files you do not return stay as they are.
+- If you rename or remove a file, list the old path in "deleteFiles" and make sure nothing imports it anymore.
+
+DEPENDENCIES RULES:
+
+- Prefer plain React and CSS. Only add a package when it clearly helps (for example "lucide-react" for icons, "framer-motion" for animation).
+- Only list packages that are NOT already installed. Use "latest" as the version.
+- Never add packages that need a server, database or build step.
+
+QUALITY RULES:
+
+- Return JSON only. No markdown, no code fences, no text outside the JSON.
+- Build exactly what the user asked for. Do not leave TODOs or empty sections.
+- The design must look professional, modern and fully responsive (mobile first).
+- Use real, believable content instead of "Lorem ipsum".
+- Use accessible HTML (semantic tags, alt text, button labels).
+- Do not use external image URLs that may break. Use CSS gradients, emoji, inline SVG or icon libraries instead.
+- Preserve existing functionality and design unless the user asks to change it.
 - Keep the code valid and runnable in Sandpack.
-- Do not use external files that do not exist.
-- Do not leave TODO placeholders.
-- Actually build the website requested by the user.
-- Make the design professional, modern and responsive.
-- Preserve existing functionality unless the user asks to change it.
 `;
 
+const ALLOWED_EXTENSIONS = [".js", ".jsx", ".css", ".json"];
+const MAX_FILES = 40;
+const MAX_FILE_SIZE = 200000; // characters per file
+
+function isSafePath(path) {
+  if (typeof path !== "string") return false;
+  if (!path.startsWith("/")) return false;
+  if (path.includes("..")) return false;
+  if (path.includes("//")) return false;
+  if (path.length > 120) return false;
+  return ALLOWED_EXTENSIONS.some((ext) => path.endsWith(ext));
+}
+
+function isSafeDependencyName(name) {
+  return (
+    typeof name === "string" &&
+    /^(@[a-z0-9-~][a-z0-9-._~]*\/)?[a-z0-9-~][a-z0-9-._~]*$/.test(name) &&
+    name.length <= 80
+  );
+}
+
 export default async function handler(req, res) {
-  // Only POST is allowed
   if (req.method !== "POST") {
     return res.status(405).json({
       error: "Method not allowed"
@@ -52,11 +98,18 @@ export default async function handler(req, res) {
 
     const prompt = body.prompt;
     const files = body.files || {};
+    const dependencies = body.dependencies || {};
     const history = Array.isArray(body.history) ? body.history : [];
 
     if (!prompt || typeof prompt !== "string") {
       return res.status(400).json({
         error: "Please enter a website request."
+      });
+    }
+
+    if (prompt.length > 4000) {
+      return res.status(400).json({
+        error: "Your request is too long. Please shorten it."
       });
     }
 
@@ -69,12 +122,6 @@ export default async function handler(req, res) {
       });
     }
 
-    /*
-     * A specific, reliable free coding model — instead of the
-     * "openrouter/free" auto-router, which OpenRouter itself documents
-     * as "preview status, quality and latency vary". A named model
-     * gives consistent results between requests.
-     */
     const model =
       process.env.OPENROUTER_MODEL || "qwen/qwen3-coder:free";
 
@@ -85,15 +132,21 @@ ${prompt}
 CURRENT PROJECT FILES:
 ${JSON.stringify(files, null, 2)}
 
+CURRENTLY INSTALLED DEPENDENCIES:
+${JSON.stringify(dependencies, null, 2)}
+
 Remember:
 Return ONLY the required JSON object.
 `;
 
-    // Include prior turns so follow-up edits ("make that button bigger")
-    // have context beyond just the current file state.
     const conversationMessages = history
-      .filter((m) => m && typeof m.text === "string" && (m.role === "user" || m.role === "assistant"))
-      .slice(-10) // keep the last 10 turns — enough context without bloating the prompt
+      .filter(
+        (m) =>
+          m &&
+          typeof m.text === "string" &&
+          (m.role === "user" || m.role === "assistant")
+      )
+      .slice(-10)
       .map((m) => ({
         role: m.role === "assistant" ? "assistant" : "user",
         content: m.text
@@ -103,7 +156,7 @@ Return ONLY the required JSON object.
 
     const timeout = setTimeout(() => {
       controller.abort();
-    }, 55000); // stays under the 60s maxDuration set in vercel.json
+    }, 55000);
 
     let response;
 
@@ -151,9 +204,6 @@ Return ONLY the required JSON object.
       clearTimeout(timeout);
     }
 
-    /*
-     * Read response safely.
-     */
     const rawText = await response.text();
 
     let data;
@@ -162,15 +212,11 @@ Return ONLY the required JSON object.
       data = JSON.parse(rawText);
     } catch {
       return res.status(502).json({
-        error:
-          "OpenRouter returned an invalid response.",
+        error: "OpenRouter returned an invalid response.",
         raw: rawText.slice(0, 500)
       });
     }
 
-    /*
-     * OpenRouter/API error.
-     */
     if (!response.ok) {
       console.error("OpenRouter error:", data);
 
@@ -182,11 +228,7 @@ Return ONLY the required JSON object.
       });
     }
 
-    /*
-     * Get AI text.
-     */
-    const content =
-      data?.choices?.[0]?.message?.content;
+    const content = data?.choices?.[0]?.message?.content;
 
     if (!content) {
       return res.status(502).json({
@@ -194,9 +236,6 @@ Return ONLY the required JSON object.
       });
     }
 
-    /*
-     * Clean possible markdown fences.
-     */
     let cleaned = content.trim();
 
     if (cleaned.startsWith("```")) {
@@ -207,18 +246,12 @@ Return ONLY the required JSON object.
         .trim();
     }
 
-    /*
-     * Parse AI JSON.
-     */
     let result;
 
     try {
       result = JSON.parse(cleaned);
     } catch (error) {
-      console.error(
-        "AI JSON parse failed:",
-        cleaned
-      );
+      console.error("AI JSON parse failed:", cleaned.slice(0, 1000));
 
       return res.status(502).json({
         error:
@@ -226,70 +259,105 @@ Return ONLY the required JSON object.
       });
     }
 
-    /*
-     * Validate required structure.
-     */
     if (
       !result ||
       typeof result !== "object" ||
       !result.files ||
-      typeof result.files !== "object"
+      typeof result.files !== "object" ||
+      Array.isArray(result.files)
     ) {
       return res.status(502).json({
-        error:
-          "AI response did not contain valid website files."
+        error: "AI response did not contain valid website files."
       });
     }
 
     /*
-     * Make sure App.js exists.
+     * Validate and clean every returned file.
      */
+    const cleanFiles = {};
+
+    for (const [path, code] of Object.entries(result.files)) {
+      if (!isSafePath(path)) {
+        console.warn("Skipping unsafe file path:", path);
+        continue;
+      }
+
+      if (typeof code !== "string" || code.length === 0) {
+        continue;
+      }
+
+      if (code.length > MAX_FILE_SIZE) {
+        console.warn("Skipping oversized file:", path);
+        continue;
+      }
+
+      cleanFiles[path] = code;
+    }
+
+    if (Object.keys(cleanFiles).length === 0) {
+      return res.status(502).json({
+        error: "AI did not return any usable files. Please try again."
+      });
+    }
+
+    if (Object.keys(cleanFiles).length > MAX_FILES) {
+      return res.status(502).json({
+        error: "AI returned too many files. Try a simpler request."
+      });
+    }
+
+    /*
+     * /App.js must exist either in this response or already in the project.
+     */
+    const deleteFiles = Array.isArray(result.deleteFiles)
+      ? result.deleteFiles.filter(
+          (p) => isSafePath(p) && p !== "/App.js"
+        )
+      : [];
+
+    const appWillExist =
+      typeof cleanFiles["/App.js"] === "string" ||
+      typeof files["/App.js"] !== "undefined";
+
+    if (!appWillExist) {
+      return res.status(502).json({
+        error: "AI response is missing /App.js."
+      });
+    }
+
+    /*
+     * Validate dependencies.
+     */
+    const cleanDependencies = {};
+
     if (
-      typeof result.files["/App.js"] !== "string"
+      result.dependencies &&
+      typeof result.dependencies === "object" &&
+      !Array.isArray(result.dependencies)
     ) {
-      return res.status(502).json({
-        error:
-          "AI response is missing /App.js."
-      });
+      for (const name of Object.keys(result.dependencies)) {
+        if (isSafeDependencyName(name)) {
+          cleanDependencies[name] = "latest";
+        }
+      }
     }
 
-    /*
-     * Make sure styles.css exists.
-     */
-    if (
-      typeof result.files["/styles.css"] !== "string"
-    ) {
-      return res.status(502).json({
-        error:
-          "AI response is missing /styles.css."
-      });
-    }
-
-    /*
-     * Return clean response to frontend.
-     */
     return res.status(200).json({
       message:
         typeof result.message === "string"
           ? result.message
           : "Website generated successfully.",
 
-      files: {
-        "/App.js": result.files["/App.js"],
-        "/styles.css": result.files["/styles.css"]
-      }
+      files: cleanFiles,
+      deleteFiles,
+      dependencies: cleanDependencies
     });
-
   } catch (error) {
-    console.error(
-      "Buildora backend error:",
-      error
-    );
+    console.error("Buildora backend error:", error);
 
     if (error?.name === "AbortError") {
       return res.status(504).json({
-        error:
-          "AI took too long to respond. Please try again."
+        error: "AI took too long to respond. Please try again."
       });
     }
 
@@ -299,4 +367,4 @@ Return ONLY the required JSON object.
         "Buildora could not generate the website."
     });
   }
-              }
+      }
