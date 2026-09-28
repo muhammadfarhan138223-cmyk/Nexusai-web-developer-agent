@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ArrowUp,
   ChevronDown,
@@ -180,6 +180,33 @@ const starterMessage = {
   role: "assistant",
   text: "Welcome to Buildora. Describe the website you want to build and I'll generate the code for the live preview."
 };
+
+const STORAGE_KEY = "buildora_project_v1";
+
+// Loads the last saved project from this browser, if any and valid.
+function loadSavedProject() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+
+    const saved = JSON.parse(raw);
+
+    if (
+      saved &&
+      saved.files &&
+      saved.files["/App.js"] &&
+      typeof saved.files["/App.js"].code === "string"
+    ) {
+      return saved;
+    }
+  } catch {
+    // Corrupt or blocked storage — just start fresh.
+  }
+
+  return null;
+}
+
+// Shown at the bottom of the preview when the generated code has an error.
 function ErrorFixer({ onFix, loading }) {
   const { sandpack } = useSandpack();
   const error = sandpack.error;
@@ -205,7 +232,8 @@ function ErrorFixer({ onFix, loading }) {
       </button>
     </div>
   );
-    }
+}
+
 const faqs = [
   {
     q: "Is Buildora free to use?",
@@ -230,9 +258,16 @@ const faqs = [
 ];
 
 function App() {
-  const [files, setFiles] = useState(starterFiles);
-  const [dependencies, setDependencies] = useState({});
-  const [messages, setMessages] = useState([starterMessage]);
+  // Read the saved project once, on first load only.
+  const [savedProject] = useState(loadSavedProject);
+
+  const [files, setFiles] = useState(savedProject?.files || starterFiles);
+  const [dependencies, setDependencies] = useState(
+    savedProject?.dependencies || {}
+  );
+  const [messages, setMessages] = useState(
+    savedProject?.messages?.length ? savedProject.messages : [starterMessage]
+  );
   const [prompt, setPrompt] = useState("");
   const [loading, setLoading] = useState(false);
   const [activeFile, setActiveFile] = useState("/App.js");
@@ -241,20 +276,37 @@ function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [copied, setCopied] = useState(false);
   const [openFaq, setOpenFaq] = useState(null);
+  const [previewKey, setPreviewKey] = useState(0);
 
   const fileList = useMemo(
     () => Object.keys(files),
     [files]
   );
 
-  // Forces Sandpack to reload when packages change,
-  // otherwise newly added packages may not get installed.
+  // Forces Sandpack to reload when packages change (or when the refresh
+  // button is pressed), otherwise new packages may not get installed.
   const depsKey = JSON.stringify(dependencies);
+  const providerKey = `${depsKey}-${previewKey}`;
+
+  // Auto-save the project in this browser so a refresh doesn't lose work.
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify({
+          files,
+          dependencies,
+          messages: messages.slice(-30)
+        })
+      );
+    } catch {
+      // Storage full or blocked — saving is a bonus, never fatal.
+    }
+  }, [files, dependencies, messages]);
 
   const sendPrompt = async (overrideText) => {
-    const text = (
-      typeof overrideText === "string" ? overrideText : prompt
-    ).trim();
+    const isOverride = typeof overrideText === "string";
+    const text = (isOverride ? overrideText : prompt).trim();
 
     if (!text || loading) return;
 
@@ -271,7 +323,13 @@ function App() {
       .map((m) => ({ role: m.role, text: m.text }));
 
     setMessages((prev) => [...prev, userMessage]);
-    setPrompt("");
+
+    // Keep whatever the user was typing when this is an automatic
+    // "Fix with AI" request.
+    if (!isOverride) {
+      setPrompt("");
+    }
+
     setLoading(true);
 
     try {
@@ -371,6 +429,12 @@ function App() {
         id: Date.now()
       }
     ]);
+
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+    } catch {
+      // ignore
+    }
   };
 
   const copyCode = async () => {
@@ -437,7 +501,10 @@ function App() {
             Reset
           </button>
 
-          <button className="runButton">
+          <button
+            className="runButton"
+            onClick={() => setPreviewKey((k) => k + 1)}
+          >
             <Play size={14} />
             Run
           </button>
@@ -599,7 +666,7 @@ function App() {
 
               <button
                 className="sendButton"
-                onClick={sendPrompt}
+                onClick={() => sendPrompt()}
                 disabled={
                   loading || !prompt.trim()
                 }
@@ -704,15 +771,14 @@ function App() {
             <div className="codeArea">
 
               <SandpackProvider
-                key={depsKey}
+                key={providerKey}
                 template="react"
                 files={files}
                 theme="dark"
                 customSetup={{ dependencies }}
                 options={{
-                  activeFile: "/App.js",
-                  visibleFiles: fileList,
-                  bundlerTimeOut: 120000
+                  activeFile,
+                  visibleFiles: fileList
                 }}
               >
 
@@ -799,9 +865,7 @@ function App() {
               </button>
 
               <button
-                onClick={() =>
-                  window.location.reload()
-                }
+                onClick={() => setPreviewKey((k) => k + 1)}
               >
                 <RefreshCw size={14} />
               </button>
@@ -818,14 +882,15 @@ function App() {
             >
 
               <SandpackProvider
-                key={depsKey}
+                key={providerKey}
                 template="react"
                 files={files}
                 theme="dark"
                 customSetup={{ dependencies }}
                 options={{
                   activeFile: "/App.js",
-                  visibleFiles: fileList
+                  visibleFiles: fileList,
+                  bundlerTimeOut: 120000
                 }}
               >
 
@@ -841,6 +906,8 @@ function App() {
                   />
 
                 </SandpackLayout>
+
+                <ErrorFixer onFix={sendPrompt} loading={loading} />
 
               </SandpackProvider>
 
