@@ -21,7 +21,8 @@ body {
     sans-serif;
   background: #070a10;
   color: #edf2f7;
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 button,
@@ -1078,3 +1079,162 @@ button:disabled {
     height: 94%;
   }
     }
+
+
+  /* =========================================================
+   SITE FOOTER — founder info + FAQ
+   ========================================================= */
+
+.siteFooter {
+  width: 100%;
+  background: #070a12;
+  border-top: 1px solid #1a2233;
+  padding: 60px 24px 30px;
+  color: #cbd5e1;
+}
+
+.footerInner {
+  max-width: 960px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 48px;
+}
+
+@media (min-width: 860px) {
+  .footerInner {
+    grid-template-columns: 1fr 1.2fr;
+    gap: 64px;
+  }
+}
+
+.founderBlock {
+  display: flex;
+  gap: 16px;
+}
+
+.founderAvatar {
+  flex-shrink: 0;
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  font-size: 15px;
+  color: #ffffff;
+  background: linear-gradient(135deg, #2563eb, #7c3aed);
+}
+
+.founderBlock h2 {
+  margin: 0 0 10px;
+  font-size: 20px;
+  color: #ffffff;
+}
+
+.founderBlock p {
+  margin: 0 0 14px;
+  font-size: 14px;
+  line-height: 1.7;
+  color: #9aa7bd;
+}
+
+.founderLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #60a5fa;
+  text-decoration: none;
+}
+
+.founderLink:hover {
+  text-decoration: underline;
+}
+
+.faqBlock h2 {
+  margin: 0 0 16px;
+  font-size: 20px;
+  color: #ffffff;
+}
+
+.faqList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.faqItem {
+  border: 1px solid #1f2937;
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.5);
+  overflow: hidden;
+}
+
+.faqItem.open {
+  border-color: #2563eb55;
+}
+
+.faqQuestion {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  text-align: left;
+  font-size: 14px;
+  font-weight: 500;
+  color: #e2e8f0;
+}
+
+.faqChevron {
+  flex-shrink: 0;
+  transition: transform 0.2s ease;
+  color: #64748b;
+}
+
+.faqChevron.rotated {
+  transform: rotate(180deg);
+  color: #60a5fa;
+}
+
+.faqAnswer {
+  margin: 0;
+  padding: 0 16px 16px;
+  font-size: 13.5px;
+  line-height: 1.7;
+  color: #9aa7bd;
+}
+
+.footerBottom {
+  max-width: 960px;
+  margin: 40px auto 0;
+  padding-top: 20px;
+  border-top: 1px solid #1a2233;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  font-size: 12.5px;
+  color: #64748b;
+  flex-wrap: wrap;
+}
+
+.footerBottom a {
+  color: #64748b;
+  text-decoration: none;
+}
+
+.footerBottom a:hover {
+  color: #94a3b8;
+  text-decoration: underline;
+}
+
+.footerDot {
+  opacity: 0.5;
+}
