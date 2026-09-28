@@ -192,6 +192,112 @@ const GENERATION_STEPS = [
   "Final checks — almost ready"
 ];
 
+const faqs = [
+  {
+    q: "Is Buildora free to use?",
+    a: "Yes. Buildora runs on a free AI model, so there's no cost to describe your idea and get a working website preview."
+  },
+  {
+    q: "Do I need to know how to code?",
+    a: "No. Just describe what you want in plain English (or Roman Urdu/Hindi) and Buildora writes the React and CSS code for you, with a live preview."
+  },
+  {
+    q: "What can I build with it?",
+    a: "Landing pages, portfolios, small business sites, SaaS-style pages, and more — multi-file React projects with components, styles and a live preview."
+  },
+  {
+    q: "Who built Buildora?",
+    a: "Buildora was built by Farhan Balouch, a developer and entrepreneur from Ahmadpur East, Pakistan, working in AI, SEO, and online business."
+  },
+  {
+    q: "Is my data safe?",
+    a: "Your prompts and generated code are sent only to the AI model needed to build your site — nothing is sold or shared."
+  }
+];
+
+/* ------------------------------------------------------------------ */
+/* Helpers                                                             */
+/* ------------------------------------------------------------------ */
+
+const ALLOWED_EXT = [".js", ".jsx", ".css", ".json"];
+
+function isSafePath(p) {
+  return (
+    typeof p === "string" &&
+    p.startsWith("/") &&
+    !p.includes("..") &&
+    !p.includes("//") &&
+    p.length <= 120 &&
+    ALLOWED_EXT.some((e) => p.endsWith(e))
+  );
+}
+
+function isSafeDep(name) {
+  return (
+    typeof name === "string" &&
+    name.length <= 80 &&
+    /^(@[a-z0-9-~][a-z0-9-._~]*\/)?[a-z0-9-~][a-z0-9-._~]*$/.test(name)
+  );
+}
+
+function stripFences(code) {
+  return code
+    .replace(/^```[a-z]*\n/i, "")
+    .replace(/\n```\s*$/, "");
+}
+
+const TAG_RE =
+  /<<<(MESSAGE|FILE|DELETE|DEPS|SUGGESTIONS|END)(?: ([^>\n]+?))?>>>/g;
+
+function parseBuild(text) {
+  const out = {
+    message: "",
+    files: {},
+    deleteFiles: [],
+    dependencies: {},
+    suggestions: [],
+    complete: false
+  };
+
+  const marks = [...text.matchAll(TAG_RE)];
+
+  marks.forEach((m, i) => {
+    const kind = m[1];
+    const arg = (m[2] || "").trim();
+    const end = marks[i + 1] ? marks[i + 1].index : text.length;
+    const body = text
+      .slice(m.index + m[0].length, end)
+      .replace(/^\n/, "")
+      .replace(/\s+$/, "");
+
+    if (kind === "MESSAGE") {
+      out.message = body;
+    } else if (kind === "FILE") {
+      if (isSafePath(arg) && body) out.files[arg] = stripFences(body);
+    } else if (kind === "DELETE") {
+      if (isSafePath(arg) && arg !== "/App.js") out.deleteFiles.push(arg);
+    } else if (kind === "DEPS") {
+      body
+        .split("\n")
+        .map((s) => s.trim())
+        .filter(isSafeDep)
+        .forEach((name) => {
+          out.dependencies[name] = "latest";
+        });
+    } else if (kind === "SUGGESTIONS") {
+      out.suggestions = body
+        .split("\n")
+        .map((s) => s.trim().slice(0, 80))
+        .filter(Boolean)
+        .slice(0, 3);
+    } else if (kind === "END") {
+      out.complete = true;
+    }
+  });
+
+  return out;
+}
+
 // Loads the last saved project from this browser, if any and valid.
 function loadSavedProject() {
   try {
@@ -214,6 +320,10 @@ function loadSavedProject() {
 
   return null;
 }
+
+/* ------------------------------------------------------------------ */
+/* Small components                                                    */
+/* ------------------------------------------------------------------ */
 
 // Types the assistant's reply out letter by letter (newest message only).
 function TypedText({ text, animate }) {
@@ -374,103 +484,9 @@ function ErrorFixer({ onFix, loading }) {
   );
 }
 
-const faqs = [
-  {
-    q: "Is Buildora free to use?",
-    a: "Yes. Buildora runs on a free AI model, so there's no cost to describe your idea and get a working website preview."
-  },
-  {
-    q: "Do I need to know how to code?",
-    a: "No. Just describe what you want in plain English (or Roman Urdu/Hindi) and Buildora writes the React and CSS code for you, with a live preview."
-  },
-  {
-    q: "What can I build with it?",
-    a: "Landing pages, portfolios, small business sites, SaaS-style pages, and more — multi-file React projects with components, styles and a live preview."
-  },
-  {
-    q: "Who built Buildora?",
-    a: "Buildora was built by Farhan Balouch, a developer and entrepreneur from Ahmadpur East, Pakistan, working in AI, SEO, and online business."
-  },
-  {
-    q: "Is my data safe?",
-    a: "Your prompts and generated code are sent only to the AI model needed to build your site — nothing is sold or shared."
-  }
-];
-const ALLOWED_EXT = [".js", ".jsx", ".css", ".json"];
-
-function isSafePath(p) {
-  return (
-    typeof p === "string" &&
-    p.startsWith("/") &&
-    !p.includes("..") &&
-    !p.includes("//") &&
-    p.length <= 120 &&
-    ALLOWED_EXT.some((e) => p.endsWith(e))
-  );
-}
-
-function isSafeDep(name) {
-  return (
-    typeof name === "string" &&
-    name.length <= 80 &&
-    /^(@[a-z0-9-~][a-z0-9-._~]*\/)?[a-z0-9-~][a-z0-9-._~]*$/.test(name)
-  );
-}
-
-function stripFences(code) {
-  return code
-    .replace(/^```[a-z]*\n/i, "")
-    .replace(/\n```\s*$/, "");
-}
-
-const TAG_RE =
-  /<<<(MESSAGE|FILE|DELETE|DEPS|SUGGESTIONS|END)(?: ([^>\n]+?))?>>>/g;
-
-function parseBuild(text) {
-  const out = {
-    message: "",
-    files: {},
-    deleteFiles: [],
-    dependencies: {},
-    suggestions: [],
-    complete: false
-  };
-
-  const marks = [...text.matchAll(TAG_RE)];
-
-  marks.forEach((m, i) => {
-    const kind = m[1];
-    const arg = (m[2] || "").trim();
-    const end = marks[i + 1] ? marks[i + 1].index : text.length;
-    const body = text
-      .slice(m.index + m[0].length, end)
-      .replace(/^\n/, "")
-      .replace(/\s+$/, "");
-
-    if (kind === "MESSAGE") out.message = body;
-    else if (kind === "FILE") {
-      if (isSafePath(arg) && body) out.files[arg] = stripFences(body);
-    } else if (kind === "DELETE") {
-      if (isSafePath(arg) && arg !== "/App.js") out.deleteFiles.push(arg);
-    } else if (kind === "DEPS") {
-      body
-        .split("\n")
-        .map((s) => s.trim())
-        .filter(isSafeDep)
-        .forEach((name) => {
-          out.dependencies[name] = "latest";
-        });
-    } else if (kind === "SUGGESTIONS") {
-      out.suggestions = body
-        .split("\n")
-        .map((s) => s.trim().slice(0, 80))
-        .filter(Boolean)
-        .slice(0, 3);
-    } else if (kind === "END") out.complete = true;
-  });
-
-  return out;
-}
+/* ------------------------------------------------------------------ */
+/* Main App                                                            */
+/* ------------------------------------------------------------------ */
 
 function App() {
   // Read the saved project once, on first load only.
@@ -494,10 +510,7 @@ function App() {
   const [previewKey, setPreviewKey] = useState(0);
   const chatEndRef = useRef(null);
 
-  const fileList = useMemo(
-    () => Object.keys(files),
-    [files]
-  );
+  const fileList = useMemo(() => Object.keys(files), [files]);
 
   // Forces Sandpack to reload when packages change (or when the refresh
   // button is pressed), otherwise new packages may not get installed.
@@ -538,12 +551,18 @@ function App() {
 
     const userMessage = { id: Date.now(), role: "user", text };
 
+    // Conversation so far (before this new message), so follow-up
+    // edits have context beyond just the current file state.
     const historyForRequest = messages
       .filter((m) => !m.error)
       .map((m) => ({ role: m.role, text: m.text }));
 
     setMessages((prev) => [...prev, userMessage]);
+
+    // Keep whatever the user was typing when this is an automatic
+    // request (Fix with AI / suggestion button).
     if (!isOverride) setPrompt("");
+
     setLoading(true);
 
     try {
@@ -640,8 +659,7 @@ function App() {
           id: Date.now() + 1,
           role: "assistant",
           animate: true,
-          text:
-            data.message || "Done. I've updated the project preview.",
+          text: data.message || "Done. I've updated the project preview.",
           changes,
           packages: Object.keys(data.dependencies),
           suggestions: data.suggestions
@@ -660,138 +678,6 @@ function App() {
           text: networkFail
             ? "Connection toot gaya. Dobara try karo, ya request chhoti karo."
             : error.message || "Unable to connect to the AI backend."
-        }
-      ]);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-    // Conversation so far (before this new message), so follow-up
-    // edits have context beyond just the current file state.
-    const historyForRequest = messages
-      .filter((m) => !m.error)
-      .map((m) => ({ role: m.role, text: m.text }));
-
-    setMessages((prev) => [...prev, userMessage]);
-
-    // Keep whatever the user was typing when this is an automatic
-    // request (Fix with AI / suggestion button).
-    if (!isOverride) {
-      setPrompt("");
-    }
-
-    setLoading(true);
-
-    try {
-      const response = await fetch("/api/chat", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          prompt: text,
-          files: Object.fromEntries(
-            Object.entries(files).map(([path, f]) => [path, f.code])
-          ),
-          dependencies,
-          history: historyForRequest
-        })
-      });
-
-      // Read as text first: if the server timed out, Vercel sends plain
-      // text instead of JSON, which used to crash with a confusing error.
-      const raw = await response.text();
-      let data;
-
-      try {
-        data = JSON.parse(raw);
-      } catch {
-        throw new Error(
-          response.status === 504 || /timeout|error occurred/i.test(raw)
-            ? "The AI took too long and the server stopped it. Please try again, or ask for a smaller change."
-            : "The server sent an unexpected reply. Please try again."
-        );
-      }
-
-      if (!response.ok) {
-        throw new Error(
-          data.error || "Something went wrong."
-        );
-      }
-
-      const changes = [];
-
-      if (data.files) {
-        const nextFiles = {};
-
-        Object.entries(data.files).forEach(([path, value]) => {
-          nextFiles[path] = {
-            code: typeof value === "string" ? value : value.code || ""
-          };
-
-          changes.push({
-            path,
-            action: files[path] ? "updated" : "created"
-          });
-        });
-
-        (data.deleteFiles || []).forEach((path) => {
-          if (files[path]) {
-            changes.push({ path, action: "deleted" });
-          }
-        });
-
-        if (Object.keys(nextFiles).length > 0) {
-          setFiles((prev) => {
-            const merged = { ...prev, ...nextFiles };
-
-            (data.deleteFiles || []).forEach((path) => {
-              delete merged[path];
-            });
-
-            return merged;
-          });
-
-          if (
-            data.dependencies &&
-            Object.keys(data.dependencies).length > 0
-          ) {
-            setDependencies((prev) => ({
-              ...prev,
-              ...data.dependencies
-            }));
-          }
-
-          const firstNew = Object.keys(nextFiles)[0];
-          setActiveFile(nextFiles["/App.js"] ? "/App.js" : firstNew);
-        }
-      }
-
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: Date.now() + 1,
-          role: "assistant",
-          animate: true,
-          text:
-            data.message ||
-            "Done. I've updated the project preview.",
-          changes,
-          packages: Object.keys(data.dependencies || {}),
-          suggestions: data.suggestions || []
-        }
-      ]);
-    } catch (error) {
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: Date.now() + 1,
-          role: "assistant",
-          error: true,
-          text:
-            error.message ||
-            "Unable to connect to the AI backend."
         }
       ]);
     } finally {
@@ -843,616 +729,476 @@ function App() {
 
   return (
     <>
-    <div className="appShell">
-
-      {/* TOP BAR */}
-      <header className="topbar">
-
-        <div className="brandArea">
-
-          <button
-            className="mobileIcon"
-            onClick={() => setMobileMenu(true)}
-          >
-            <Menu size={18} />
-          </button>
-
-          <div className="nexusLogo">
-            <span>B</span>
-          </div>
-
-          <div className="brandText">
-            <strong>BUILDORA</strong>
-            <small>AI WEB BUILDER</small>
-          </div>
-
-          <div className="projectBadge">
-            Untitled project
-          </div>
-
-        </div>
-
-        <div className="topActions">
-
-          <button
-            className="topButton"
-            onClick={resetProject}
-          >
-            <RotateCcw size={15} />
-            Reset
-          </button>
-
-          <button
-            className="runButton"
-            onClick={() => setPreviewKey((k) => k + 1)}
-          >
-            <Play size={14} />
-            Run
-          </button>
-
-          <button className="avatarButton">
-            F
-          </button>
-
-        </div>
-
-      </header>
-
-
-      {/* WORKSPACE */}
-      <div className="workspace">
-
-        {/* LEFT PANEL */}
-        <aside
-          className={`leftPanel ${
-            sidebarOpen ? "" : "collapsed"
-          }`}
-        >
-
-          <div className="chatTop">
-
-            <div>
-              <div className="sectionTitle">
-                <MessageSquare size={15} />
-                Assistant
-              </div>
-
-              <div className="sectionSub">
-                Build your idea with AI
-              </div>
-            </div>
-
+      <div className="appShell">
+        {/* TOP BAR */}
+        <header className="topbar">
+          <div className="brandArea">
             <button
-              className="smallIcon"
-              onClick={() => setSidebarOpen(false)}
+              className="mobileIcon"
+              onClick={() => setMobileMenu(true)}
             >
-              <PanelLeft size={16} />
+              <Menu size={18} />
             </button>
 
+            <div className="nexusLogo">
+              <span>B</span>
+            </div>
+
+            <div className="brandText">
+              <strong>BUILDORA</strong>
+              <small>AI WEB BUILDER</small>
+            </div>
+
+            <div className="projectBadge">Untitled project</div>
           </div>
 
+          <div className="topActions">
+            <button className="topButton" onClick={resetProject}>
+              <RotateCcw size={15} />
+              Reset
+            </button>
 
-          {/* CHAT */}
-          <div className="chatMessages">
+            <button
+              className="runButton"
+              onClick={() => setPreviewKey((k) => k + 1)}
+            >
+              <Play size={14} />
+              Run
+            </button>
 
-            {messages.map((message, index) => {
-              const isLast = index === messages.length - 1;
+            <button className="avatarButton">F</button>
+          </div>
+        </header>
 
-              return (
-                <div
-                  key={message.id}
-                  className={`chatMessage ${message.role}`}
-                >
+        {/* WORKSPACE */}
+        <div className="workspace">
+          {/* LEFT PANEL */}
+          <aside
+            className={`leftPanel ${sidebarOpen ? "" : "collapsed"}`}
+          >
+            <div className="chatTop">
+              <div>
+                <div className="sectionTitle">
+                  <MessageSquare size={15} />
+                  Assistant
+                </div>
 
-                  {message.role === "assistant" && (
-                    <div className="messageAvatar">
-                      {message.error ? (
-                        <Zap size={14} />
-                      ) : (
-                        <Sparkles size={14} />
-                      )}
-                    </div>
-                  )}
+                <div className="sectionSub">Build your idea with AI</div>
+              </div>
 
-                  {message.role === "assistant" ? (
-                    <div className="messageColumn">
+              <button
+                className="smallIcon"
+                onClick={() => setSidebarOpen(false)}
+              >
+                <PanelLeft size={16} />
+              </button>
+            </div>
 
-                      <div
-                        className={`messageBubble ${
-                          message.error ? "error" : ""
-                        }`}
-                      >
-                        <TypedText
-                          text={message.text}
-                          animate={!!message.animate && isLast}
-                        />
-                      </div>
+            {/* CHAT */}
+            <div className="chatMessages">
+              {messages.map((message, index) => {
+                const isLast = index === messages.length - 1;
 
-                      <ChangesCard
-                        changes={message.changes}
-                        packages={message.packages}
-                        onOpen={setActiveFile}
-                      />
-
-                      {isLast &&
-                        !loading &&
-                        message.suggestions?.length > 0 && (
-                          <div className="followUps">
-                            {message.suggestions.map((s) => (
-                              <button
-                                key={s}
-                                onClick={() => sendPrompt(s)}
-                              >
-                                <Sparkles size={12} />
-                                {s}
-                              </button>
-                            ))}
-                          </div>
+                return (
+                  <div
+                    key={message.id}
+                    className={`chatMessage ${message.role}`}
+                  >
+                    {message.role === "assistant" && (
+                      <div className="messageAvatar">
+                        {message.error ? (
+                          <Zap size={14} />
+                        ) : (
+                          <Sparkles size={14} />
                         )}
+                      </div>
+                    )}
 
-                    </div>
-                  ) : (
+                    {message.role === "assistant" ? (
+                      <div className="messageColumn">
+                        <div
+                          className={`messageBubble ${
+                            message.error ? "error" : ""
+                          }`}
+                        >
+                          <TypedText
+                            text={message.text}
+                            animate={!!message.animate && isLast}
+                          />
+                        </div>
+
+                        <ChangesCard
+                          changes={message.changes}
+                          packages={message.packages}
+                          onOpen={setActiveFile}
+                        />
+
+                        {isLast &&
+                          !loading &&
+                          message.suggestions?.length > 0 && (
+                            <div className="followUps">
+                              {message.suggestions.map((s) => (
+                                <button
+                                  key={s}
+                                  onClick={() => sendPrompt(s)}
+                                >
+                                  <Sparkles size={12} />
+                                  {s}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                      </div>
+                    ) : (
+                      <div className="messageBubble">{message.text}</div>
+                    )}
+                  </div>
+                );
+              })}
+
+              {loading && (
+                <div className="chatMessage assistant">
+                  <div className="messageAvatar">
+                    <Sparkles size={14} />
+                  </div>
+
+                  <div className="messageColumn">
                     <div className="messageBubble">
-                      {message.text}
+                      <GeneratingSteps />
                     </div>
-                  )}
-
-                </div>
-              );
-            })}
-
-            {loading && (
-              <div className="chatMessage assistant">
-
-                <div className="messageAvatar">
-                  <Sparkles size={14} />
-                </div>
-
-                <div className="messageColumn">
-                  <div className="messageBubble">
-                    <GeneratingSteps />
                   </div>
                 </div>
+              )}
 
+              <div ref={chatEndRef} />
+            </div>
+
+            {/* SUGGESTIONS */}
+            {messages.length <= 1 && (
+              <div className="suggestions">
+                <button
+                  onClick={() =>
+                    setPrompt(
+                      "Create a premium SaaS landing page with a dark design, hero section, features, pricing and responsive layout."
+                    )
+                  }
+                >
+                  <Sparkles size={14} />
+                  SaaS landing page
+                </button>
+
+                <button
+                  onClick={() =>
+                    setPrompt(
+                      "Create a modern portfolio website for a creative developer with projects, about section and contact CTA."
+                    )
+                  }
+                >
+                  <Code2 size={14} />
+                  Developer portfolio
+                </button>
               </div>
             )}
 
-            <div ref={chatEndRef} />
+            {/* PROMPT */}
+            <div className="composer">
+              <textarea
+                value={prompt}
+                onChange={(event) => setPrompt(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" && !event.shiftKey) {
+                    event.preventDefault();
+                    sendPrompt();
+                  }
+                }}
+                placeholder="Describe what you want to build..."
+                disabled={loading}
+              />
 
-          </div>
+              <div className="composerBottom">
+                <span>Enter to send · Shift + Enter for new line</span>
 
-
-          {/* SUGGESTIONS */}
-          {messages.length <= 1 && (
-            <div className="suggestions">
-
-              <button
-                onClick={() =>
-                  setPrompt(
-                    "Create a premium SaaS landing page with a dark design, hero section, features, pricing and responsive layout."
-                  )
-                }
-              >
-                <Sparkles size={14} />
-                SaaS landing page
-              </button>
-
-              <button
-                onClick={() =>
-                  setPrompt(
-                    "Create a modern portfolio website for a creative developer with projects, about section and contact CTA."
-                  )
-                }
-              >
-                <Code2 size={14} />
-                Developer portfolio
-              </button>
-
+                <button
+                  className="sendButton"
+                  onClick={() => sendPrompt()}
+                  disabled={loading || !prompt.trim()}
+                >
+                  {loading ? (
+                    <Loader2 size={16} className="spin" />
+                  ) : (
+                    <ArrowUp size={17} />
+                  )}
+                </button>
+              </div>
             </div>
+          </aside>
+
+          {/* COLLAPSED LEFT */}
+          {!sidebarOpen && (
+            <button
+              className="expandSidebar"
+              onClick={() => setSidebarOpen(true)}
+            >
+              <PanelLeft size={17} />
+            </button>
           )}
 
+          {/* CENTER EDITOR */}
+          <section className="editorPanel">
+            <div className="panelHeader">
+              <div className="panelHeading">
+                <Code2 size={15} />
+                Code
+              </div>
 
-          {/* PROMPT */}
-          <div className="composer">
-
-            <textarea
-              value={prompt}
-              onChange={(event) =>
-                setPrompt(event.target.value)
-              }
-              onKeyDown={(event) => {
-                if (
-                  event.key === "Enter" &&
-                  !event.shiftKey
-                ) {
-                  event.preventDefault();
-                  sendPrompt();
-                }
-              }}
-              placeholder="Describe what you want to build..."
-              disabled={loading}
-            />
-
-            <div className="composerBottom">
-
-              <span>
-                Enter to send · Shift + Enter for new line
-              </span>
-
-              <button
-                className="sendButton"
-                onClick={() => sendPrompt()}
-                disabled={
-                  loading || !prompt.trim()
-                }
-              >
-                {loading ? (
-                  <Loader2
-                    size={16}
-                    className="spin"
-                  />
-                ) : (
-                  <ArrowUp size={17} />
-                )}
+              <button className="copyButton" onClick={copyCode}>
+                <Copy size={14} />
+                {copied ? "Copied" : "Copy"}
               </button>
-
             </div>
 
-          </div>
+            <div className="editorBody">
+              <div className="fileTree">
+                <div className="treeHeader">
+                  <span>FILES</span>
 
-        </aside>
+                  <button>
+                    <Plus size={14} />
+                  </button>
+                </div>
 
+                <div className="treeFolder">
+                  <div className="folderRow">
+                    <FolderOpen size={15} />
+                    <span>src</span>
+                    <ChevronDown size={13} />
+                  </div>
 
-        {/* COLLAPSED LEFT */}
-        {!sidebarOpen && (
-          <button
-            className="expandSidebar"
-            onClick={() => setSidebarOpen(true)}
-          >
-            <PanelLeft size={17} />
-          </button>
-        )}
+                  {fileList.map((file) => {
+                    const filename = file.replace("/", "");
 
+                    return (
+                      <button
+                        key={file}
+                        className={`fileRow ${
+                          activeFile === file ? "active" : ""
+                        }`}
+                        onClick={() => setActiveFile(file)}
+                      >
+                        {fileIcon(file)}
+                        <span>{filename}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
 
-        {/* CENTER EDITOR */}
-        <section className="editorPanel">
+              <div className="codeArea">
+                <SandpackProvider
+                  key={`${providerKey}-${activeFile}`}
+                  template="react"
+                  files={files}
+                  theme="dark"
+                  customSetup={{ dependencies }}
+                  options={{
+                    activeFile,
+                    visibleFiles: fileList
+                  }}
+                >
+                  <SandpackLayout>
+                    <SandpackCodeEditor
+                      showTabs
+                      showLineNumbers
+                      showInlineErrors
+                      wrapContent
+                      closableTabs={false}
+                      style={{
+                        height: "100%",
+                        width: "100%"
+                      }}
+                    />
+                  </SandpackLayout>
+                </SandpackProvider>
+              </div>
+            </div>
+          </section>
 
-          <div className="panelHeader">
+          {/* RIGHT PREVIEW */}
+          <section className="previewPanel">
+            <div className="panelHeader">
+              <div className="panelHeading">
+                <Eye size={15} />
+                Preview
+                <span className="liveBadge">
+                  <span></span>
+                  Live
+                </span>
+              </div>
 
-            <div className="panelHeading">
-              <Code2 size={15} />
-              Code
+              <div className="previewControls">
+                <button
+                  className={previewMode === "desktop" ? "selected" : ""}
+                  onClick={() => setPreviewMode("desktop")}
+                >
+                  <Monitor size={14} />
+                </button>
+
+                <button
+                  className={previewMode === "tablet" ? "selected" : ""}
+                  onClick={() => setPreviewMode("tablet")}
+                >
+                  <Tablet size={14} />
+                </button>
+
+                <button
+                  className={previewMode === "mobile" ? "selected" : ""}
+                  onClick={() => setPreviewMode("mobile")}
+                >
+                  <Smartphone size={14} />
+                </button>
+
+                <button onClick={() => setPreviewKey((k) => k + 1)}>
+                  <RefreshCw size={14} />
+                </button>
+              </div>
             </div>
 
-            <button
-              className="copyButton"
-              onClick={copyCode}
-            >
-              <Copy size={14} />
-              {copied ? "Copied" : "Copy"}
-            </button>
+            <div className="previewWorkspace">
+              <div className={`previewFrame ${previewMode}`}>
+                <SandpackProvider
+                  key={providerKey}
+                  template="react"
+                  files={files}
+                  theme="dark"
+                  customSetup={{ dependencies }}
+                  options={{
+                    activeFile: "/App.js",
+                    visibleFiles: fileList,
+                    bundlerTimeOut: 120000
+                  }}
+                >
+                  <SandpackLayout>
+                    <SandpackPreview
+                      showOpenInCodeSandbox={false}
+                      showRefreshButton
+                      style={{
+                        height: "100%",
+                        width: "100%"
+                      }}
+                    />
+                  </SandpackLayout>
 
-          </div>
+                  <ErrorFixer onFix={sendPrompt} loading={loading} />
+                </SandpackProvider>
+              </div>
+            </div>
+          </section>
+        </div>
 
+        {/* MOBILE DRAWER */}
+        {mobileMenu && (
+          <div className="mobileOverlay">
+            <div className="mobileDrawer">
+              <div className="drawerHeader">
+                <strong>BUILDORA</strong>
 
-          <div className="editorBody">
-
-            <div className="fileTree">
-
-              <div className="treeHeader">
-                <span>FILES</span>
-
-                <button>
-                  <Plus size={14} />
+                <button onClick={() => setMobileMenu(false)}>
+                  <X size={18} />
                 </button>
               </div>
 
-              <div className="treeFolder">
+              <div className="drawerContent">
+                <button
+                  onClick={() => {
+                    resetProject();
+                    setMobileMenu(false);
+                  }}
+                >
+                  <RotateCcw size={16} />
+                  Reset project
+                </button>
 
-                <div className="folderRow">
-                  <FolderOpen size={15} />
-                  <span>src</span>
-                  <ChevronDown size={13} />
-                </div>
-
-                {fileList.map((file) => {
-
-                  const filename =
-                    file.replace("/", "");
-
-                  return (
-                    <button
-                      key={file}
-                      className={`fileRow ${
-                        activeFile === file
-                          ? "active"
-                          : ""
-                      }`}
-                      onClick={() =>
-                        setActiveFile(file)
-                      }
-                    >
-                      {fileIcon(file)}
-                      <span>{filename}</span>
-                    </button>
-                  );
-                })}
-
+                <button
+                  onClick={() => {
+                    setSidebarOpen(true);
+                    setMobileMenu(false);
+                  }}
+                >
+                  <MessageSquare size={16} />
+                  Assistant
+                </button>
               </div>
-
             </div>
-
-
-            <div className="codeArea">
-
-              <SandpackProvider
-                key={`${providerKey}-${activeFile}`}
-                template="react"
-                files={files}
-                theme="dark"
-                customSetup={{ dependencies }}
-                options={{
-                  activeFile,
-                  visibleFiles: fileList
-                }}
-              >
-
-                <SandpackLayout>
-
-                  <SandpackCodeEditor
-                    showTabs
-                    showLineNumbers
-                    showInlineErrors
-                    wrapContent
-                    closableTabs={false}
-                    style={{
-                      height: "100%",
-                      width: "100%"
-                    }}
-                  />
-
-                </SandpackLayout>
-
-              </SandpackProvider>
-
-            </div>
-
           </div>
-
-        </section>
-
-
-        {/* RIGHT PREVIEW */}
-        <section className="previewPanel">
-
-          <div className="panelHeader">
-
-            <div className="panelHeading">
-              <Eye size={15} />
-              Preview
-
-              <span className="liveBadge">
-                <span></span>
-                Live
-              </span>
-            </div>
-
-
-            <div className="previewControls">
-
-              <button
-                className={
-                  previewMode === "desktop"
-                    ? "selected"
-                    : ""
-                }
-                onClick={() =>
-                  setPreviewMode("desktop")
-                }
-              >
-                <Monitor size={14} />
-              </button>
-
-              <button
-                className={
-                  previewMode === "tablet"
-                    ? "selected"
-                    : ""
-                }
-                onClick={() =>
-                  setPreviewMode("tablet")
-                }
-              >
-                <Tablet size={14} />
-              </button>
-
-              <button
-                className={
-                  previewMode === "mobile"
-                    ? "selected"
-                    : ""
-                }
-                onClick={() =>
-                  setPreviewMode("mobile")
-                }
-              >
-                <Smartphone size={14} />
-              </button>
-
-              <button
-                onClick={() => setPreviewKey((k) => k + 1)}
-              >
-                <RefreshCw size={14} />
-              </button>
-
-            </div>
-
-          </div>
-
-
-          <div className="previewWorkspace">
-
-            <div
-              className={`previewFrame ${previewMode}`}
-            >
-
-              <SandpackProvider
-                key={providerKey}
-                template="react"
-                files={files}
-                theme="dark"
-                customSetup={{ dependencies }}
-                options={{
-                  activeFile: "/App.js",
-                  visibleFiles: fileList,
-                  bundlerTimeOut: 120000
-                }}
-              >
-
-                <SandpackLayout>
-
-                  <SandpackPreview
-                    showOpenInCodeSandbox={false}
-                    showRefreshButton
-                    style={{
-                      height: "100%",
-                      width: "100%"
-                    }}
-                  />
-
-                </SandpackLayout>
-
-                <ErrorFixer onFix={sendPrompt} loading={loading} />
-
-              </SandpackProvider>
-
-            </div>
-
-          </div>
-
-        </section>
-
+        )}
       </div>
 
-
-      {/* MOBILE DRAWER */}
-      {mobileMenu && (
-        <div className="mobileOverlay">
-
-          <div className="mobileDrawer">
-
-            <div className="drawerHeader">
-              <strong>BUILDORA</strong>
-
-              <button
-                onClick={() =>
-                  setMobileMenu(false)
-                }
+      <footer className="siteFooter">
+        <div className="footerInner">
+          <section className="founderBlock">
+            <div className="founderAvatar">FB</div>
+            <div>
+              <h2>Built by Farhan Balouch</h2>
+              <p>
+                Buildora is an independent project by{" "}
+                <strong>Farhan Balouch</strong>, a developer and
+                entrepreneur from Ahmadpur East, Pakistan, working in AI,
+                SEO, and online business. Buildora is part of his ongoing
+                work exploring what AI can build.
+              </p>
+              <a
+                href="https://farhanbalouch.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="founderLink"
               >
-                <X size={18} />
-              </button>
+                farhanbalouch.com
+                <ChevronRight size={14} />
+              </a>
             </div>
+          </section>
 
-            <div className="drawerContent">
+          <section className="faqBlock">
+            <h2>Frequently asked questions</h2>
 
-              <button
-                onClick={() => {
-                  resetProject();
-                  setMobileMenu(false);
-                }}
-              >
-                <RotateCcw size={16} />
-                Reset project
-              </button>
-
-              <button
-                onClick={() => {
-                  setSidebarOpen(true);
-                  setMobileMenu(false);
-                }}
-              >
-                <MessageSquare size={16} />
-                Assistant
-              </button>
-
-            </div>
-
-          </div>
-
-        </div>
-      )}
-
-    </div>
-
-    <footer className="siteFooter">
-
-      <div className="footerInner">
-
-        <section className="founderBlock">
-          <div className="founderAvatar">FB</div>
-          <div>
-            <h2>Built by Farhan Balouch</h2>
-            <p>
-              Buildora is an independent project by{" "}
-              <strong>Farhan Balouch</strong>, a developer and
-              entrepreneur from Ahmadpur East, Pakistan, working in AI,
-              SEO, and online business. Buildora is part of his ongoing
-              work exploring what AI can build.
-            </p>
-            <a
-              href="https://farhanbalouch.com"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="founderLink"
-            >
-              farhanbalouch.com
-              <ChevronRight size={14} />
-            </a>
-          </div>
-        </section>
-
-        <section className="faqBlock">
-          <h2>Frequently asked questions</h2>
-
-          <div className="faqList">
-            {faqs.map((item, i) => {
-              const open = openFaq === i;
-              return (
-                <div key={item.q} className={`faqItem ${open ? "open" : ""}`}>
-                  <button
-                    className="faqQuestion"
-                    onClick={() => setOpenFaq(open ? null : i)}
+            <div className="faqList">
+              {faqs.map((item, i) => {
+                const open = openFaq === i;
+                return (
+                  <div
+                    key={item.q}
+                    className={`faqItem ${open ? "open" : ""}`}
                   >
-                    <span>{item.q}</span>
-                    <ChevronDown
-                      size={16}
-                      className={`faqChevron ${open ? "rotated" : ""}`}
-                    />
-                  </button>
-                  {open && (
-                    <p className="faqAnswer">{item.a}</p>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </section>
+                    <button
+                      className="faqQuestion"
+                      onClick={() => setOpenFaq(open ? null : i)}
+                    >
+                      <span>{item.q}</span>
+                      <ChevronDown
+                        size={16}
+                        className={`faqChevron ${open ? "rotated" : ""}`}
+                      />
+                    </button>
+                    {open && <p className="faqAnswer">{item.a}</p>}
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        </div>
 
-      </div>
-
-      <div className="footerBottom">
-        <span>© {new Date().getFullYear()} Buildora</span>
-        <span className="footerDot">•</span>
-        <a
-          href="https://farhanbalouch.com"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          A project by Farhan Balouch
-        </a>
-      </div>
-
-    </footer>
+        <div className="footerBottom">
+          <span>© {new Date().getFullYear()} Buildora</span>
+          <span className="footerDot">•</span>
+          <a
+            href="https://farhanbalouch.com"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            A project by Farhan Balouch
+          </a>
+        </div>
+      </footer>
     </>
   );
 }
