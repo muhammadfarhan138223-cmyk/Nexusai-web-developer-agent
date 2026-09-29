@@ -156,6 +156,11 @@ Switch to a light theme
 Add a contact form
 <<<END>>>
 
+OR, only when the request is genuinely too ambiguous to build safely (rare):
+<<<QUESTION>>>
+One short, specific question. No files, no code.
+<<<END>>>
+
 FORMAT RULES:
 - Start with <<<MESSAGE>>> and finish with <<<END>>>. Always write <<<END>>> last.
 - <<<FILE path>>> is followed by the full file content. Never write partial code or "rest of code".
@@ -163,6 +168,7 @@ FORMAT RULES:
 - <<<DEPS>>> lists only NEW npm packages, one per line. Optional.
 - <<<SUGGESTIONS>>> has exactly 3 lines, each a command of max 8 words.
 - Only return files that are new or changed.
+- Use <<<QUESTION>>> ONLY when you truly cannot proceed (e.g. "build my business website" with zero detail on what the business does). For almost every request, make reasonable assumptions and build something real instead of asking — do not overuse this.
 
 PROJECT RULES:
 - Runs in Sandpack React template. /App.js must exist with a default export. /styles.css is the global stylesheet.
@@ -173,6 +179,26 @@ PROJECT RULES:
 - If a data file holds icons, store icon NAMES as strings and map them to imported components in one place, or import the icon components directly. Never leave an icon undefined.
 - Only use lucide-react icons that surely exist (Menu, X, ArrowRight, Check, Star, Zap, Shield, Globe, Layers, Sparkles, Code, Rocket, Users, BarChart3, Mail, Phone, MapPin, Clock, Heart, Play, ChevronDown, Quote, Lock, Cpu, Palette, Search). For brand logos (GitHub, Twitter/X, LinkedIn, Instagram, Facebook, YouTube) use small inline SVG, not lucide.
 - Preserve existing design and functionality unless asked to change it.
+
+DEFAULT SCAFFOLDING (apply automatically, without being asked, unless the user clearly wants a single isolated section):
+- Every site gets a real Navbar (with working links/routing between pages) and a real Footer (columns, copyright, relevant links), not just a hero section floating alone.
+- For a business/SaaS/product/portfolio/agency site, always include, unless the user restricts scope: Home, an About or Features/Services page, a Contact page (with a working local form using React state, no real backend), and a Pricing page if it's a product/SaaS. Infer reasonable page names from the request.
+- Give the document a real title: in /App.js use useEffect to set document.title to a specific brand + tagline (not "React App"). Add short, relevant alt text on every image.
+- Every page must render correctly at 375px, 768px and 1200px widths — this is mandatory, not optional, and applies to every page you generate, not just the homepage.
+
+BACKEND / LOGIN / DATABASE REQUESTS:
+- This project has no real server; Sandpack only runs frontend React. If asked for login, signup, a database, or "backend":
+  1. Prefer a clearly-labeled LOCAL simulation using React state + window.localStorage (mirrors real UX: forms, validation, a logged-in state) so the preview actually works end-to-end.
+  2. In <<<MESSAGE>>>, briefly and honestly tell the user this is a local demo and that a real deployment needs a backend service such as Supabase or Firebase (both have free tiers), and that you can write that integration code if they share they want it and confirm they'll add their project keys.
+  3. Only write real Supabase/Firebase client SDK code (using @supabase/supabase-js or firebase) if the user explicitly asks for real/production auth — add it to <<<DEPS>>> and clearly comment where their API keys go.
+
+CATEGORY-AWARE DESIGN (do not reuse the same look for every request — pick the direction that fits what is being built):
+- SaaS / product marketing site: dark or light glass UI, bento-grid features, pricing tiers, logo marquee — the "modern startup" look.
+- AI / chatbot / assistant app: a real chat UI (message bubbles, input bar, sidebar for conversations), calmer neutral palette, rounded soft surfaces — not a marketing hero.
+- Portfolio / personal / creative: editorial typography, large imagery, asymmetric layout, more whitespace, a personal tone.
+- E-commerce / shop: product grid with cards (image, price, add-to-cart state), category filters, a cart summary — commerce UI patterns, not a SaaS hero.
+- Restaurant / local business / blog / other real-world categories: match real-world expectations for that category (menu layout, article layout, service list) instead of defaulting to a generic tech gradient hero.
+- Read the request for its actual category and let fonts, palette, imagery and layout patterns follow that category; only fall back to the general SaaS-style hero when the category is genuinely unclear.
 
 DESIGN RULES (this is what makes it premium):
 - Fonts: import 2 Google Fonts with @import at the very top of /styles.css. Big display headings (clamp(2.6rem, 6vw, 5rem)), tight letter-spacing (-0.02em), line-height 1.05 for headings, 1.6 for body.
@@ -219,7 +245,8 @@ function requestBody(p, messages, stream, maxTokens) {
     messages,
     temperature: 0.4,
     max_tokens: maxTokens || p.maxTokens,
-    stream
+    stream,
+    ...(stream ? { stream_options: { include_usage: true } } : {})
   });
 }
 
@@ -306,6 +333,7 @@ async function streamOnce(p, messages, res, signal, state) {
   let text = "";
   let finish = "";
   let usedModel = "";
+  let usage = null;
 
   for await (const chunk of upstream.body) {
     buffer += decoder.decode(chunk, { stream: true });
@@ -326,6 +354,7 @@ async function streamOnce(p, messages, res, signal, state) {
       }
 
       if (json.model && !usedModel) usedModel = json.model;
+      if (json.usage) usage = json.usage;
 
       if (json.error) {
         return {
@@ -333,7 +362,8 @@ async function streamOnce(p, messages, res, signal, state) {
           text,
           finish: "error",
           message: json.error.message,
-          usedModel
+          usedModel,
+          usage
         };
       }
       const choice = json.choices?.[0];
@@ -345,7 +375,52 @@ async function streamOnce(p, messages, res, signal, state) {
       if (choice?.finish_reason) finish = choice.finish_reason;
     }
   }
-  return { ok: true, text, finish, usedModel };
+  return { ok: true, text, finish, usedModel, usage };
+}
+
+/* ------------------------------------------------------------------ */
+/* Live status + self-check                                            */
+/* ------------------------------------------------------------------ */
+
+// Writes a status marker the frontend shows live in the "working on it"
+// panel. This is our honest substitute for "AI takes a screenshot" —
+// it is a real progress narration + a real automated code check below,
+// not a visual check (which needs a browser + vision model we don't run).
+function status(res, state, pct, text) {
+  if (!state.started) {
+    res.status(200);
+    res.setHeader("Content-Type", "text/plain; charset=utf-8");
+    res.setHeader("Cache-Control", "no-cache, no-transform");
+    res.setHeader("X-Accel-Buffering", "no");
+    state.started = true;
+  }
+  res.write(`<<<STATUS ${pct}%|${text.replace(/[>\n]/g, " ")}>>>\n`);
+}
+
+// Cheap, free, zero-token static check: catches the two most common
+// causes of a blank/broken preview — unbalanced brackets (a line
+// accidentally dropped) and braces mismatched across a file.
+function findBracketIssues(replyText) {
+  const issues = [];
+  const fileBlocks = [
+    ...replyText.matchAll(
+      /<<<FILE ([^>\n]+)>>>\n([\s\S]*?)(?=<<<(?:FILE|DELETE|DEPS|SUGGESTIONS|END)|$)/g
+    )
+  ];
+  const pairs = [["{", "}"], ["(", ")"], ["[", "]"]];
+
+  for (const [, path, body] of fileBlocks) {
+    for (const [open, close] of pairs) {
+      const opens = (body.match(new RegExp(`\\${open}`, "g")) || []).length;
+      const closes = (body.match(new RegExp(`\\${close}`, "g")) || []).length;
+      if (opens !== closes) {
+        issues.push(
+          `${path.trim()}: unbalanced "${open}${close}" (${opens} vs ${closes}) — likely a missing or extra character`
+        );
+      }
+    }
+  }
+  return issues;
 }
 
 export default async function handler(req, res) {
@@ -400,13 +475,26 @@ export default async function handler(req, res) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 285000);
   const state = { started: false };
+  let totalPromptTokens = 0;
+  let totalCompletionTokens = 0;
+  let sawUsage = false;
+
+  const addUsage = (u) => {
+    if (!u) return;
+    sawUsage = true;
+    totalPromptTokens += u.prompt_tokens || 0;
+    totalCompletionTokens += u.completion_tokens || 0;
+  };
 
   try {
+    status(res, state, 5, "Understanding your request...");
+
     // New site (few files) -> make a design brief first. Small edits skip this.
     const isNewBuild = Object.keys(files).length < 4;
     const providers = activeChain(
       pickChain(prompt, isNewBuild).map((p) => p.name)
     );
+    if (isNewBuild) status(res, state, 15, "Planning the design...");
     const plan = isNewBuild ? await makePlan(providers, prompt) : "";
 
     const userMessage = `USER REQUEST:
@@ -431,24 +519,29 @@ Reply ONLY in the required tag format and end with <<<END>>>.`;
     const errors = [];
 
     for (const p of providers) {
+      status(res, state, 25, `Writing code with ${p.models[0]}...`);
       try {
         const r = await streamOnce(p, baseMessages, res, controller.signal, state);
         if (!r.ok) {
           errors.push(`${p.name}: ${r.message}`);
+          status(res, state, 25, `${p.models[0]} is unavailable, trying the next model...`);
           continue;
         }
         if (r.finish === "error" && !r.text) {
           errors.push(`${p.name}: ${r.message}`);
+          status(res, state, 25, `${p.models[0]} is busy, trying the next model...`);
           continue;
         }
-        if (!r.text.includes("<<<FILE")) {
-          // Model replied but gave no usable files — try the next provider
-          // instead of showing "AI did not return any files" to the user.
+        if (!r.text.includes("<<<FILE") && !r.text.includes("<<<QUESTION")) {
+          // Model replied but gave no usable files or question — try the
+          // next provider instead of showing an empty result to the user.
           errors.push(`${p.name}: no files in response`);
+          status(res, state, 25, `${p.models[0]} gave an unusable reply, trying the next model...`);
           continue;
         }
         used = p;
         full = r.text;
+        addUsage(r.usage);
         console.log(
           `[Buildora] provider=${p.name} model=${r.usedModel || p.models[0]} plan=${plan ? "yes" : "no"}`
         );
@@ -456,6 +549,7 @@ Reply ONLY in the required tag format and end with <<<END>>>.`;
       } catch (e) {
         if (e?.name === "AbortError") throw e;
         errors.push(`${p.name}: ${e?.message || "request failed"}`);
+        status(res, state, 25, `${p.models[0]} failed, trying the next model...`);
       }
     }
 
@@ -470,6 +564,7 @@ Reply ONLY in the required tag format and end with <<<END>>>.`;
 
     // Cut off? Ask the same model to continue (up to 3 times).
     for (let round = 0; round < 3 && !full.includes("<<<END>>>"); round++) {
+      status(res, state, 55, "Reply was long, continuing...");
       const r = await streamOnce(
         used,
         [
@@ -487,33 +582,74 @@ Reply ONLY in the required tag format and end with <<<END>>>.`;
       );
       if (!r.ok || !r.text) break;
       full += r.text;
+      addUsage(r.usage);
     }
 
-    // Auto-repair: if the model referenced a component it never wrote,
-    // ask it (once) to add exactly the missing file(s), instead of the
-    // preview breaking with "Could not find module".
-    const existingPaths = Object.keys(files).filter(isSafePath);
-    const missing = findMissingImports(existingPaths, full);
-    if (missing.length > 0) {
-      console.log("[Buildora] missing imports, repairing:", missing);
-      const r = await streamOnce(
-        used,
-        [
-          ...baseMessages,
-          { role: "assistant", content: full },
-          {
-            role: "user",
-            content:
-              "Your reply is missing file(s) that are imported but never written, which breaks the preview:\n" +
-              missing.join("\n") +
-              "\n\nReturn ONLY the COMPLETE missing file(s) using <<<FILE path>>>, nothing else, then <<<END>>>. Do not repeat files you already sent."
-          }
-        ],
-        res,
-        controller.signal,
-        state
+    const isQuestion = full.includes("<<<QUESTION");
+
+    if (!isQuestion) {
+      status(res, state, 70, "Checking generated files for errors...");
+
+      // Self-check pass #1: static analysis, costs zero tokens.
+      const existingPaths = Object.keys(files).filter(isSafePath);
+      let issues = [
+        ...findMissingImports(existingPaths, full),
+        ...findBracketIssues(full)
+      ];
+
+      if (issues.length > 0) {
+        status(
+          res,
+          state,
+          82,
+          `Found ${issues.length} issue(s), fixing with ${used.models[0]}...`
+        );
+        const r = await streamOnce(
+          used,
+          [
+            ...baseMessages,
+            { role: "assistant", content: full },
+            {
+              role: "user",
+              content:
+                "Your reply has these problems, which will break the live preview:\n" +
+                issues.join("\n") +
+                "\n\nReturn ONLY the COMPLETE corrected file(s) using <<<FILE path>>>, nothing else, then <<<END>>>. Do not repeat files that are already correct."
+            }
+          ],
+          res,
+          controller.signal,
+          state
+        );
+        if (r.ok && r.text) {
+          full += r.text;
+          addUsage(r.usage);
+        }
+
+        // Self-check pass #2: verify the fix actually resolved it.
+        const stillIssues = [
+          ...findMissingImports(existingPaths, full),
+          ...findBracketIssues(full)
+        ];
+        status(
+          res,
+          state,
+          94,
+          stillIssues.length === 0
+            ? "Rechecked — no issues found."
+            : "Rechecked — some issues may remain. Use Fix with AI if the preview shows an error."
+        );
+      } else {
+        status(res, state, 94, "Rechecked — no issues found.");
+      }
+    }
+
+    status(res, state, 100, "Done.");
+    res.write(`<<<MODEL ${used.name} / ${used.models[0]}>>>\n`);
+    if (sawUsage) {
+      res.write(
+        `<<<USAGE ~${totalPromptTokens} prompt + ~${totalCompletionTokens} completion tokens>>>\n`
       );
-      if (r.ok && r.text) full += r.text;
     }
 
     clearTimeout(timeout);
@@ -534,4 +670,4 @@ Reply ONLY in the required tag format and end with <<<END>>>.`;
       .status(error?.name === "AbortError" ? 504 : 500)
       .json({ error: message });
   }
-}
+                   }
