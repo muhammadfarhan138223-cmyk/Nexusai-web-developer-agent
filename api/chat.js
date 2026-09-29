@@ -1,33 +1,63 @@
 /* ------------------------------------------------------------------ */
 /* MODELS - yahan sirf model ke naam badalne hain. Keys Vercel env se. */
 /* ------------------------------------------------------------------ */
-const CHAIN = [
-  {
-    name: "openrouter",
+// Two chains: BIG for multipage/professional requests (smarter, slower coder
+// models first), SMALL for quick edits/small pages (faster models first).
+// Order = priority. If a provider fails OR returns unusable output, the next
+// one in the list is tried automatically.
+const PROVIDER_DEFS = {
+  qwen: {
+    name: "qwen",
     keyEnv: "OPENROUTER_API_KEY",
     url: "https://openrouter.ai/api/v1/chat/completions",
-    // Pehla model try hota hai, busy ho to agla (OpenRouter khud fallback karta hai)
-    models: ["z-ai/glm-5.2:free", "qwen/qwen3-coder:free"],
+    models: ["qwen/qwen3-coder:free"],
     maxTokens: 30000
   },
-  {
+  deepseek: {
+    name: "deepseek",
+    keyEnv: "OPENROUTER_API_KEY",
+    url: "https://openrouter.ai/api/v1/chat/completions",
+    models: ["deepseek/deepseek-chat-v3.1:free"],
+    maxTokens: 30000
+  },
+  glm: {
+    name: "glm",
+    keyEnv: "OPENROUTER_API_KEY",
+    url: "https://openrouter.ai/api/v1/chat/completions",
+    models: ["z-ai/glm-5.2:free"],
+    maxTokens: 30000
+  },
+  gemini: {
     name: "gemini",
     keyEnv: "GEMINI_API_KEY",
     url: "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
     models: ["gemini-2.5-flash"],
     maxTokens: 32000
   },
-  {
+  groq: {
     name: "groq",
     keyEnv: "GROQ_API_KEY",
     url: "https://api.groq.com/openai/v1/chat/completions",
     models: ["openai/gpt-oss-120b"],
     maxTokens: 8000
   }
-];
+};
+
+// Big/professional/multipage request -> smart coder models first.
+const CHAIN_BIG = ["qwen", "deepseek", "glm", "gemini", "groq"];
+// Small edit or simple page -> fastest models first.
+const CHAIN_SMALL = ["glm", "gemini", "qwen", "groq"];
+
+const BIG_KEYWORDS =
+  /multi[- ]?page|multipage|professional|premium|full website|complete website|saas|landing page|e-?commerce|dashboard|admin panel|blog|portfolio site|business website/i;
+
+function pickChain(prompt, isNewBuild) {
+  const names = isNewBuild && BIG_KEYWORDS.test(prompt) ? CHAIN_BIG : CHAIN_SMALL;
+  return names.map((n) => PROVIDER_DEFS[n]);
+}
 
 // Design plan wala chhota step in models se hota hai (fast + sasta)
-const PLANNER_CHAIN = ["gemini", "groq", "openrouter"];
+const PLANNER_CHAIN = ["gemini", "groq", "qwen"];
 
 /* ------------------------------------------------------------------ */
 /* Prompts                                                             */
@@ -112,18 +142,18 @@ function isSafePath(path) {
   );
 }
 
-function activeChain() {
-  return CHAIN.map((p) => ({ ...p, key: process.env[p.keyEnv] })).filter(
-    (p) => p.key
-  );
+function activeChain(names) {
+  const seen = new Set();
+  const unique = names.filter((n) => (seen.has(n) ? false : seen.add(n)));
+  return unique
+    .map((n) => PROVIDER_DEFS[n])
+    .map((p) => ({ ...p, key: process.env[p.keyEnv] }))
+    .filter((p) => p.key);
 }
 
 function requestBody(p, messages, stream, maxTokens) {
   return JSON.stringify({
     model: p.models[0],
-    ...(p.name === "openrouter" && p.models.length > 1
-      ? { models: p.models }
-      : {}),
     messages,
     temperature: 0.4,
     max_tokens: maxTokens || p.maxTokens,
@@ -135,7 +165,7 @@ function headersFor(p) {
   return {
     Authorization: `Bearer ${p.key}`,
     "Content-Type": "application/json",
-    ...(p.name === "openrouter"
+    ...(p.url.includes("openrouter.ai")
       ? {
           "HTTP-Referer": process.env.SITE_URL || "https://buildora.vercel.app",
           "X-Title": "Buildora"
@@ -276,8 +306,8 @@ export default async function handler(req, res) {
       .json({ error: "Your request is too long. Please shorten it." });
   }
 
-  const providers = activeChain();
-  if (providers.length === 0) {
+  const anyProviders = activeChain(CHAIN_SMALL.concat(CHAIN_BIG));
+  if (anyProviders.length === 0) {
     return res.status(500).json({
       error:
         "No API key found. Add OPENROUTER_API_KEY, GEMINI_API_KEY or GROQ_API_KEY in Vercel."
@@ -312,6 +342,9 @@ export default async function handler(req, res) {
   try {
     // New site (few files) -> make a design brief first. Small edits skip this.
     const isNewBuild = Object.keys(files).length < 4;
+    const providers = activeChain(
+      pickChain(prompt, isNewBuild).map((p) => p.name)
+    );
     const plan = isNewBuild ? await makePlan(providers, prompt) : "";
 
     const userMessage = `USER REQUEST:
@@ -344,6 +377,12 @@ Reply ONLY in the required tag format and end with <<<END>>>.`;
         }
         if (r.finish === "error" && !r.text) {
           errors.push(`${p.name}: ${r.message}`);
+          continue;
+        }
+        if (!r.text.includes("<<<FILE")) {
+          // Model replied but gave no usable files — try the next provider
+          // instead of showing "AI did not return any files" to the user.
+          errors.push(`${p.name}: no files in response`);
           continue;
         }
         used = p;
@@ -405,4 +444,4 @@ Reply ONLY in the required tag format and end with <<<END>>>.`;
       .status(error?.name === "AbortError" ? 504 : 500)
       .json({ error: message });
   }
-  }
+}
