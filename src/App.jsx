@@ -255,6 +255,8 @@ const TAG_RE =
 
 function parseBuild(text) {
   const out = {
+    model: "",
+    usage: "",
     message: "",
     files: {},
     deleteFiles: [],
@@ -274,13 +276,15 @@ function parseBuild(text) {
       .replace(/^\n/, "")
       .replace(/\s+$/, "");
 
-    if (kind === "MESSAGE" || kind === "QUESTION") {
+   if (kind === "MESSAGE" || kind === "QUESTION") {
       out.message = body;
+    } else if (kind === "MODEL") {
+      out.model = arg;
+    } else if (kind === "USAGE") {
+      out.usage = arg;
+    } else if (kind === "STATUS") {
+      // live progress — handled separately while streaming, ignore here
     } else if (kind === "FILE") {
-      if (isSafePath(arg) && body) out.files[arg] = stripFences(body);
-    } else if (kind === "DELETE") {
-      if (isSafePath(arg) && arg !== "/App.js") out.deleteFiles.push(arg);
-    } else if (kind === "DEPS") {
       body
         .split("\n")
         .map((s) => s.trim())
@@ -519,6 +523,7 @@ function App() {
   );
   const [prompt, setPrompt] = useState(() => urlParams.get("idea") || "");
   const [loading, setLoading] = useState(false);
+  const [statusList, setStatusList] = useState([]);
   const [activeFile, setActiveFile] = useState("/App.js");
   const [previewMode, setPreviewMode] = useState("desktop");
   const [mobileMenu, setMobileMenu] = useState(false);
