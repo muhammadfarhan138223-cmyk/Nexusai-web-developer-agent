@@ -118,6 +118,58 @@ function findMissingImports(existingPaths, replyText) {
   return [...missing];
 }
 
+// Catches the other very common crash: a file is imported correctly
+// (the path exists) but the thing being imported was never actually
+// exported as default — React then renders "undefined" and crashes
+// with "Element type is invalid".
+function buildFileMap(existingFiles, replyText) {
+  const map = new Map(Object.entries(existingFiles));
+  const fileBlocks = [
+    ...replyText.matchAll(
+      /<<<FILE ([^>\n]+)>>>\n([\s\S]*?)(?=<<<(?:FILE|DELETE|DEPS|SUGGESTIONS|END)|$)/g
+    )
+  ];
+  for (const [, path, body] of fileBlocks) map.set(path.trim(), body);
+  return map;
+}
+
+const DEFAULT_IMPORT_RE =
+  /import\s+([A-Za-z_$][\w$]*)\s+from\s+["'](\.[^"']+)["']/g;
+
+function findExportMismatches(fileMap, replyText) {
+  const issues = [];
+  const fileBlocks = [
+    ...replyText.matchAll(
+      /<<<FILE ([^>\n]+)>>>\n([\s\S]*?)(?=<<<(?:FILE|DELETE|DEPS|SUGGESTIONS|END)|$)/g
+    )
+  ];
+
+  for (const [, path, body] of fileBlocks) {
+    const from = path.trim();
+    let im;
+    DEFAULT_IMPORT_RE.lastIndex = 0;
+    while ((im = DEFAULT_IMPORT_RE.exec(body))) {
+      const compName = im[1];
+      const resolved = resolvePath(from, im[2]);
+      const candidates = [
+        resolved,
+        resolved + ".js",
+        resolved + ".jsx",
+        resolved + "/index.js"
+      ];
+      const targetPath = candidates.find((c) => fileMap.has(c));
+      if (!targetPath) continue; // already caught by findMissingImports
+      const targetCode = fileMap.get(targetPath) || "";
+      if (!/export\s+default/.test(targetCode)) {
+        issues.push(
+          `${from}: imports "${compName}" as a default export from ${targetPath}, but that file has no "export default" — this causes "Element type is invalid"`
+        );
+      }
+    }
+  }
+  return issues;
+}
+
 // Design plan wala chhota step in models se hota hai (fast + sasta)
 const PLANNER_CHAIN = ["gemini", "groq", "qwen"];
 
@@ -556,10 +608,13 @@ Reply ONLY in the required tag format and end with <<<END>>>.`;
     if (!used) {
       clearTimeout(timeout);
       console.error("[Buildora] all providers failed:", errors);
-      return res.status(502).json({
-        error:
-          "All AI models are busy or rate-limited right now. Please wait a few seconds and try again."
-      });
+      const msg =
+        "All AI models are busy or rate-limited right now. Please wait a few seconds and try again.";
+      if (res.headersSent) {
+        res.write(`\n<<<e>>>${msg}`);
+        return res.end();
+      }
+      return res.status(502).json({ error: msg });
     }
 
     // Cut off? Ask the same model to continue (up to 3 times).
@@ -594,7 +649,8 @@ Reply ONLY in the required tag format and end with <<<END>>>.`;
       const existingPaths = Object.keys(files).filter(isSafePath);
       let issues = [
         ...findMissingImports(existingPaths, full),
-        ...findBracketIssues(full)
+        ...findBracketIssues(full),
+        ...findExportMismatches(buildFileMap(files, full), full)
       ];
 
       if (issues.length > 0) {
@@ -629,7 +685,8 @@ Reply ONLY in the required tag format and end with <<<END>>>.`;
         // Self-check pass #2: verify the fix actually resolved it.
         const stillIssues = [
           ...findMissingImports(existingPaths, full),
-          ...findBracketIssues(full)
+          ...findBracketIssues(full),
+          ...findExportMismatches(buildFileMap(files, full), full)
         ];
         status(
           res,
@@ -670,4 +727,4 @@ Reply ONLY in the required tag format and end with <<<END>>>.`;
       .status(error?.name === "AbortError" ? 504 : 500)
       .json({ error: message });
   }
-                   }
+}
