@@ -251,7 +251,7 @@ function stripFences(code) {
 }
 
 const TAG_RE =
-  /<<<(MESSAGE|FILE|DELETE|DEPS|SUGGESTIONS|END)(?: ([^>\n]+?))?>>>/g;
+  /<<<(MESSAGE|QUESTION|FILE|DELETE|DEPS|SUGGESTIONS|END)(?: ([^>\n]+?))?>>>/g;
 
 function parseBuild(text) {
   const out = {
@@ -274,7 +274,7 @@ function parseBuild(text) {
       .replace(/^\n/, "")
       .replace(/\s+$/, "");
 
-    if (kind === "MESSAGE") {
+    if (kind === "MESSAGE" || kind === "QUESTION") {
       out.message = body;
     } else if (kind === "FILE") {
       if (isSafePath(arg) && body) out.files[arg] = stripFences(body);
@@ -661,12 +661,13 @@ function App() {
           "The AI reply was cut off. Ask for fewer pages at a time."
         );
       }
+ const isQuestion = /<<<QUESTION>>>/.test(raw);
 
-      if (Object.keys(data.files).length === 0) {
+      if (!isQuestion && Object.keys(data.files).length === 0) {
         throw new Error("The AI did not return any files. Please try again.");
       }
 
-      if (!data.files["/App.js"] && !files["/App.js"]) {
+      if (!isQuestion && !data.files["/App.js"] && !files["/App.js"]) {
         throw new Error("The AI response is missing /App.js.");
       }
 
