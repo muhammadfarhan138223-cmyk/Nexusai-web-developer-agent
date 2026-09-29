@@ -21,6 +21,7 @@ import {
   RefreshCw,
   RotateCcw,
   Sparkles,
+  Square,
   Tablet,
   Smartphone,
   X,
@@ -273,9 +274,7 @@ function parseBuild(text) {
     const kind = m[1];
     const arg = (m[2] || "").trim();
 
-    const end = marks[i + 1]
-      ? marks[i + 1].index
-      : text.length;
+    const end = marks[i + 1] ? marks[i + 1].index : text.length;
 
     const body = text
       .slice(m.index + m[0].length, end)
@@ -284,46 +283,22 @@ function parseBuild(text) {
 
     if (kind === "MESSAGE" || kind === "QUESTION") {
       out.message = body;
-    }
-
-    /* ---------------- MESSAGE METADATA ---------------- */
-
-    else if (kind === "MODEL") {
+    } else if (kind === "MODEL") {
       out.model = arg;
-    }
-
-    else if (kind === "USAGE") {
+    } else if (kind === "USAGE") {
       out.usage = arg;
-    }
-
-    /* ---------------- LIVE STATUS ---------------- */
-
-    else if (kind === "STATUS") {
-      // Status messages are consumed live while streaming.
-      // They do not become part of the assistant message.
-    }
-
-    /* ---------------- FILE ---------------- */
-
-    else if (kind === "FILE") {
+    } else if (kind === "STATUS") {
+      // consumed live while streaming, not part of the final message.
+    } else if (kind === "FILE") {
       const path = arg;
-
       if (isSafePath(path)) {
         out.files[path] = stripFences(body);
       }
-    }
-
-    /* ---------------- DELETE ---------------- */
-
-    else if (kind === "DELETE") {
+    } else if (kind === "DELETE") {
       if (isSafePath(arg)) {
         out.deleteFiles.push(arg);
       }
-    }
-
-    /* ---------------- DEPENDENCIES ---------------- */
-
-    else if (kind === "DEPS") {
+    } else if (kind === "DEPS") {
       body
         .split("\n")
         .map((s) => s.trim())
@@ -332,21 +307,13 @@ function parseBuild(text) {
         .forEach((name) => {
           out.dependencies[name] = "latest";
         });
-    }
-
-    /* ---------------- SUGGESTIONS ---------------- */
-
-    else if (kind === "SUGGESTIONS") {
+    } else if (kind === "SUGGESTIONS") {
       out.suggestions = body
         .split("\n")
         .map((s) => s.trim().slice(0, 80))
         .filter(Boolean)
         .slice(0, 3);
-    }
-
-    /* ---------------- END ---------------- */
-
-    else if (kind === "END") {
+    } else if (kind === "END") {
       out.complete = true;
     }
   });
@@ -361,7 +328,6 @@ function parseBuild(text) {
 function loadSavedProject() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-
     if (!raw) return null;
 
     const saved = JSON.parse(raw);
@@ -386,9 +352,7 @@ function loadSavedProject() {
 /* ------------------------------------------------------------------ */
 
 function TypedText({ text, animate }) {
-  const [shown, setShown] = useState(
-    animate ? 0 : text.length
-  );
+  const [shown, setShown] = useState(animate ? 0 : text.length);
 
   useEffect(() => {
     if (!animate) {
@@ -397,11 +361,7 @@ function TypedText({ text, animate }) {
     }
 
     setShown(0);
-
-    const step = Math.max(
-      1,
-      Math.ceil(text.length / 90)
-    );
+    const step = Math.max(1, Math.ceil(text.length / 90));
 
     const id = setInterval(() => {
       setShown((n) => {
@@ -409,11 +369,7 @@ function TypedText({ text, animate }) {
           clearInterval(id);
           return n;
         }
-
-        return Math.min(
-          text.length,
-          n + step
-        );
+        return Math.min(text.length, n + step);
       });
     }, 22);
 
@@ -423,10 +379,7 @@ function TypedText({ text, animate }) {
   return (
     <>
       {text.slice(0, shown)}
-
-      {animate && shown < text.length && (
-        <span className="typingCaret" />
-      )}
+      {animate && shown < text.length && <span className="typingCaret" />}
     </>
   );
 }
@@ -439,37 +392,21 @@ function GeneratingSteps({ statusList }) {
   const [seconds, setSeconds] = useState(0);
 
   useEffect(() => {
-    const id = setInterval(() => {
-      setSeconds((s) => s + 1);
-    }, 1000);
-
+    const id = setInterval(() => setSeconds((s) => s + 1), 1000);
     return () => clearInterval(id);
   }, []);
 
   const steps = statusList.length
     ? statusList
-    : [
-        {
-          pct: 5,
-          text: "Understanding your request..."
-        }
-      ];
+    : [{ pct: 5, text: "Understanding your request..." }];
 
-  const pct =
-    steps[steps.length - 1]?.pct ?? 5;
+  const pct = steps[steps.length - 1]?.pct ?? 5;
 
   return (
     <div className="genSteps">
       <div className="genHeader">
-        <Loader2
-          size={14}
-          className="spin"
-        />
-
-        <span>
-          Buildora is working on it
-        </span>
-
+        <Loader2 size={14} className="spin" />
+        <span>Buildora is working on it</span>
         <span className="genTimer">
           {seconds}s · {pct}%
         </span>
@@ -477,30 +414,18 @@ function GeneratingSteps({ statusList }) {
 
       <ul>
         {steps.map((step, i) => {
-          const isLast =
-            i === steps.length - 1;
-
+          const isLast = i === steps.length - 1;
           return (
             <li
               key={`${step.pct}-${step.text}-${i}`}
-              className={
-                isLast
-                  ? "active"
-                  : "done"
-              }
+              className={isLast ? "active" : "done"}
             >
               {isLast ? (
-                <Loader2
-                  size={13}
-                  className="spin"
-                />
+                <Loader2 size={13} className="spin" />
               ) : (
                 <Check size={13} />
               )}
-
-              <span>
-                {step.text}
-              </span>
+              <span>{step.text}</span>
             </li>
           );
         })}
@@ -513,26 +438,13 @@ function GeneratingSteps({ statusList }) {
 /* Changes card                                                       */
 /* ------------------------------------------------------------------ */
 
-function ChangesCard({
-  changes,
-  packages,
-  onOpen
-}) {
-  const hasChanges =
-    changes && changes.length > 0;
+function ChangesCard({ changes, packages, onOpen }) {
+  const hasChanges = changes && changes.length > 0;
+  const hasPackages = packages && packages.length > 0;
 
-  const hasPackages =
-    packages && packages.length > 0;
+  if (!hasChanges && !hasPackages) return null;
 
-  if (!hasChanges && !hasPackages) {
-    return null;
-  }
-
-  const labels = {
-    created: "New",
-    updated: "Updated",
-    deleted: "Removed"
-  };
+  const labels = { created: "New", updated: "Updated", deleted: "Removed" };
 
   return (
     <div className="changesCard">
@@ -540,31 +452,18 @@ function ChangesCard({
         <>
           <div className="changesTitle">
             <FileCode2 size={13} />
-
-            {changes.length} file
-            {changes.length === 1
-              ? ""
-              : "s"} changed
+            {changes.length} file{changes.length === 1 ? "" : "s"} changed
           </div>
 
           {changes.map((c) => (
             <button
               key={`${c.path}-${c.action}`}
               className="changeRow"
-              disabled={
-                c.action === "deleted"
-              }
-              onClick={() =>
-                onOpen(c.path)
-              }
+              disabled={c.action === "deleted"}
+              onClick={() => onOpen(c.path)}
             >
-              <span className="changePath">
-                {c.path.replace(/^\//, "")}
-              </span>
-
-              <span
-                className={`changeBadge ${c.action}`}
-              >
+              <span className="changePath">{c.path.replace(/^\//, "")}</span>
+              <span className={`changeBadge ${c.action}`}>
                 {labels[c.action]}
               </span>
             </button>
@@ -573,10 +472,7 @@ function ChangesCard({
       )}
 
       {hasPackages && (
-        <div className="changesDeps">
-          Added packages:{" "}
-          {packages.join(", ")}
-        </div>
+        <div className="changesDeps">Added packages: {packages.join(", ")}</div>
       )}
     </div>
   );
@@ -588,22 +484,18 @@ function ChangesCard({
 
 function ErrorFixer({ onFix, loading }) {
   const { sandpack } = useSandpack();
-
   const error = sandpack.error;
 
   if (!error) return null;
 
-  const cleanMessage = String(
-    error.message ||
-      "Unknown error"
-  ).slice(0, 1500);
+  const cleanMessage = String(error.message || "Unknown error").slice(
+    0,
+    1500
+  );
 
   return (
     <div className="fixBar">
-      <span className="fixBarText">
-        Preview has an error
-      </span>
-
+      <span className="fixBarText">Preview has an error</span>
       <button
         className="fixBarButton"
         disabled={loading}
@@ -614,10 +506,44 @@ function ErrorFixer({ onFix, loading }) {
           )
         }
       >
-        {loading
-          ? "Fixing..."
-          : "Fix with AI"}
+        {loading ? "Fixing..." : "Fix with AI"}
       </button>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Recharge bar — replaces the boring numeric cooldown countdown.     */
+/* Fills left -> right over `seconds`, with a moving rainbow shimmer. */
+/* ------------------------------------------------------------------ */
+
+function RechargeBar({ seconds }) {
+  const [pct, setPct] = useState(0);
+
+  useEffect(() => {
+    if (!seconds) {
+      setPct(0);
+      return;
+    }
+    setPct(0);
+    const start = Date.now();
+    const totalMs = seconds * 1000;
+
+    const id = setInterval(() => {
+      const elapsed = Date.now() - start;
+      const next = Math.min(100, (elapsed / totalMs) * 100);
+      setPct(next);
+      if (next >= 100) clearInterval(id);
+    }, 40);
+
+    return () => clearInterval(id);
+  }, [seconds]);
+
+  if (!seconds) return null;
+
+  return (
+    <div className="rechargeBar" aria-hidden="true">
+      <div className="rechargeFill" style={{ width: `${pct}%` }} />
     </div>
   );
 }
@@ -626,117 +552,61 @@ function ErrorFixer({ onFix, loading }) {
 /* Main App                                                           */
 /* ------------------------------------------------------------------ */
 
+const COOLDOWN_SECONDS = 18;
+
 function App() {
-  useSeo(
-    "Buildora Builder",
-    "Build websites with AI.",
-    {
-      noindex: true,
-      path: "/app"
-    }
+  useSeo("Buildora Builder", "Build websites with AI.", {
+    noindex: true,
+    path: "/app"
+  });
+
+  const urlParams = new URLSearchParams(window.location.search);
+
+  const [projectId, setProjectId] = useState(
+    () => urlParams.get("p") || makeId()
   );
-
-  const urlParams =
-    new URLSearchParams(
-      window.location.search
-    );
-
-  const [projectId, setProjectId] =
-    useState(
-      () =>
-        urlParams.get("p") ||
-        makeId()
-    );
 
   const [user] = useState(getUser);
+  const [zipping, setZipping] = useState(false);
 
-  const [zipping, setZipping] =
-    useState(false);
+  const [savedProject] = useState(() => {
+    const pid = urlParams.get("p");
+    return (pid && getProject(pid)) || loadSavedProject();
+  });
 
-  const [savedProject] =
-    useState(() => {
-      const pid =
-        urlParams.get("p");
+  const [files, setFiles] = useState(savedProject?.files || starterFiles);
 
-      return (
-        (pid &&
-          getProject(pid)) ||
-        loadSavedProject()
-      );
-    });
-
-  const [files, setFiles] =
-    useState(
-      savedProject?.files ||
-        starterFiles
-    );
-
-  const [dependencies, setDependencies] =
-    useState(
-      savedProject?.dependencies ||
-        {
-          "lucide-react":
-            "latest"
-        }
-    );
-
-  const [messages, setMessages] =
-    useState(
-      savedProject?.messages?.length
-        ? savedProject.messages
-        : [starterMessage]
-    );
-
-  const [prompt, setPrompt] =
-    useState(
-      () =>
-        urlParams.get("idea") || ""
-    );
-
-  const [loading, setLoading] =
-    useState(false);
-
-  const [statusList, setStatusList] =
-    useState([]);
-
-  const [activeFile, setActiveFile] =
-    useState("/App.js");
-
-  const [previewMode, setPreviewMode] =
-    useState("desktop");
-
-  const [mobileMenu, setMobileMenu] =
-    useState(false);
-
-  const [sidebarOpen, setSidebarOpen] =
-    useState(true);
-
-  const [copied, setCopied] =
-    useState(false);
-
-  const [openFaq, setOpenFaq] =
-    useState(null);
-
-  const [previewKey, setPreviewKey] =
-    useState(0);
-
-  const chatEndRef =
-    useRef(null);
-
-  const fileList = useMemo(
-    () => Object.keys(files),
-    [files]
+  const [dependencies, setDependencies] = useState(
+    savedProject?.dependencies || { "lucide-react": "latest" }
   );
 
-  /* -------------------------------------------------------------- */
-  /* Sandpack refresh key                                           */
-  /* -------------------------------------------------------------- */
+  const [messages, setMessages] = useState(
+    savedProject?.messages?.length ? savedProject.messages : [starterMessage]
+  );
 
-  const depsKey =
-    JSON.stringify(dependencies);
+  const [prompt, setPrompt] = useState(() => urlParams.get("idea") || "");
+  const [loading, setLoading] = useState(false);
+  const [statusList, setStatusList] = useState([]);
+  const [activeFile, setActiveFile] = useState("/App.js");
+  const [previewMode, setPreviewMode] = useState("desktop");
+  const [mobileMenu, setMobileMenu] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [copied, setCopied] = useState(false);
+  const [openFaq, setOpenFaq] = useState(null);
+  const [previewKey, setPreviewKey] = useState(0);
 
-  const providerKey =
-    `${depsKey}-${previewKey}`;
+  // Cooldown is now purely visual (RechargeBar) — no numbers, no blocking
+  // countdown text. `cooldownSeconds` just tells the bar how long to fill.
+  const [cooldown, setCooldown] = useState(0);
+  const [cooldownSeconds, setCooldownSeconds] = useState(COOLDOWN_SECONDS);
+
+  const chatEndRef = useRef(null);
+  const abortRef = useRef(null);
+
+  const fileList = useMemo(() => Object.keys(files), [files]);
+
+  const depsKey = JSON.stringify(dependencies);
+  const providerKey = `${depsKey}-${previewKey}`;
 
   /* -------------------------------------------------------------- */
   /* Auto-save                                                       */
@@ -749,51 +619,36 @@ function App() {
         JSON.stringify({
           files,
           dependencies,
-          messages: messages
-            .slice(-30)
-            .map(
-              ({
-                animate,
-                ...rest
-              }) => rest
-            )
+          messages: messages.slice(-30).map(({ animate, ...rest }) => rest)
         })
       );
     } catch {
       // Storage is optional.
     }
 
-    const firstPrompt =
-      messages.find(
-        (m) =>
-          m.role === "user"
-      );
+    const firstPrompt = messages.find((m) => m.role === "user");
 
     if (firstPrompt) {
       saveProject({
         id: projectId,
-        name: firstPrompt.text.slice(
-          0,
-          48
-        ),
+        name: firstPrompt.text.slice(0, 48),
         files,
         dependencies,
-        messages: messages
-          .slice(-30)
-          .map(
-            ({
-              animate,
-              ...rest
-            }) => rest
-          )
+        messages: messages.slice(-30).map(({ animate, ...rest }) => rest)
       });
     }
-  }, [
-    files,
-    dependencies,
-    messages,
-    projectId
-  ]);
+  }, [files, dependencies, messages, projectId]);
+
+  /* -------------------------------------------------------------- */
+  /* Cooldown ticking (still tracked in seconds for logic, just not */
+  /* shown as a number — RechargeBar shows it as a fill animation)  */
+  /* -------------------------------------------------------------- */
+
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const id = setTimeout(() => setCooldown((c) => c - 1), 1000);
+    return () => clearTimeout(id);
+  }, [cooldown]);
 
   /* -------------------------------------------------------------- */
   /* Download                                                        */
@@ -801,24 +656,11 @@ function App() {
 
   const downloadZip = async () => {
     if (zipping) return;
-
     setZipping(true);
 
     try {
-      const first =
-        messages.find(
-          (m) =>
-            m.role === "user"
-        );
-
-      await downloadProjectZip(
-        files,
-        dependencies,
-        first?.text.slice(
-          0,
-          40
-        )
-      );
+      const first = messages.find((m) => m.role === "user");
+      await downloadProjectZip(files, dependencies, first?.text.slice(0, 40));
     } finally {
       setZipping(false);
     }
@@ -829,216 +671,101 @@ function App() {
   /* -------------------------------------------------------------- */
 
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView(
-      {
-        behavior: "smooth",
-        block: "end"
-      }
-    );
-  }, [
-    messages,
-    loading,
-    statusList
-  ]);
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [messages, loading, statusList]);
 
   /* -------------------------------------------------------------- */
   /* Send prompt                                                      */
   /* -------------------------------------------------------------- */
 
-  const sendPrompt = async (
-    overrideText
-  ) => {
-    const isOverride =
-      typeof overrideText ===
-      "string";
+  const sendPrompt = async (overrideText) => {
+    const isOverride = typeof overrideText === "string";
+    const text = (isOverride ? overrideText : prompt).trim();
 
-    const text = (
-      isOverride
-        ? overrideText
-        : prompt
-    ).trim();
+    if (!text || loading) return;
+    if (cooldown > 0) return;
 
-    if (!text || loading) {
-      return;
-    }
+    const userMessage = { id: Date.now(), role: "user", text };
 
-    const userMessage = {
-      id: Date.now(),
-      role: "user",
-      text
-    };
+    const historyForRequest = messages
+      .filter((m) => !m.error)
+      .map((m) => ({ role: m.role, text: m.text }));
 
-    const historyForRequest =
-      messages
-        .filter(
-          (m) => !m.error
-        )
-        .map((m) => ({
-          role: m.role,
-          text: m.text
-        }));
+    setMessages((prev) => [...prev, userMessage]);
 
-    setMessages((prev) => [
-      ...prev,
-      userMessage
-    ]);
-
-    if (!isOverride) {
-      setPrompt("");
-    }
+    if (!isOverride) setPrompt("");
 
     setLoading(true);
     setStatusList([]);
 
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    // Track whether the request actually reached the server and started
+    // streaming, so a manual stop shows a clean "Stopped" message instead
+    // of a scary error.
+    let stoppedByUser = false;
+
     try {
-      const response =
-        await fetch(
-          "/api/chat",
-          {
-            method: "POST",
-            headers: {
-              "Content-Type":
-                "application/json"
-            },
-            body: JSON.stringify({
-              prompt: text,
-
-              files:
-                Object.fromEntries(
-                  Object.entries(
-                    files
-                  ).map(
-                    ([path, f]) => [
-                      path,
-                      f.code
-                    ]
-                  )
-                ),
-
-              dependencies,
-
-              history:
-                historyForRequest
-            })
-          }
-        );
+      const response = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
+        body: JSON.stringify({
+          prompt: text,
+          files: Object.fromEntries(
+            Object.entries(files).map(([path, f]) => [path, f.code])
+          ),
+          dependencies,
+          history: historyForRequest
+        })
+      });
 
       if (!response.ok) {
-        const errRaw =
-          await response.text();
-
-        let msg =
-          "Server error. Please try again.";
-
+        const errRaw = await response.text();
+        let msg = "Server error. Please try again.";
         try {
-          msg =
-            JSON.parse(
-              errRaw
-            ).error || msg;
+          msg = JSON.parse(errRaw).error || msg;
         } catch {
-          if (
-            response.status ===
-              504 ||
-            /timeout/i.test(
-              errRaw
-            )
-          ) {
-            msg =
-              "The server stopped the request. Try a smaller change.";
+          if (response.status === 504 || /timeout/i.test(errRaw)) {
+            msg = "The server stopped the request. Try a smaller change.";
           }
         }
-
         throw new Error(msg);
       }
 
       if (!response.body) {
-        throw new Error(
-          "The server returned an empty response."
-        );
+        throw new Error("The server returned an empty response.");
       }
 
-      /* ---------------------------------------------------------- */
-      /* Read streaming response                                    */
-      /* ---------------------------------------------------------- */
-
-      const reader =
-        response.body.getReader();
-
-      const decoder =
-        new TextDecoder();
-
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
       let raw = "";
 
       while (true) {
-        const {
-          done,
-          value
-        } = await reader.read();
+        const { done, value } = await reader.read();
+        if (done) break;
 
-        if (done) {
-          break;
-        }
-
-        const chunk =
-          decoder.decode(
-            value,
-            {
-              stream: true
-            }
-          );
-
+        const chunk = decoder.decode(value, { stream: true });
         raw += chunk;
 
-        /* ------------------------------------------------------ */
-        /* Extract live STATUS markers                             */
-        /* ------------------------------------------------------ */
+        const statusMatches = [
+          ...raw.matchAll(/<<<STATUS (\d+)%\|([^>\n]+)>>>/g)
+        ];
 
-        const statusMatches =
-          [
-            ...raw.matchAll(
-              /<<<STATUS (\d+)%\|([^>\n]+)>>>/g
-            )
-          ];
-
-        if (
-          statusMatches.length
-        ) {
+        if (statusMatches.length) {
           setStatusList(
-            statusMatches.map(
-              (m) => ({
-                pct: Number(
-                  m[1]
-                ),
-                text: m[2]
-              })
-            )
+            statusMatches.map((m) => ({ pct: Number(m[1]), text: m[2] }))
           );
         }
       }
 
       raw += decoder.decode();
 
-      /* ---------------------------------------------------------- */
-      /* Backend error marker                                       */
-      /* ---------------------------------------------------------- */
+      const errMatch = raw.match(/<<<e>>>([\s\S]*)$/);
+      if (errMatch) throw new Error(errMatch[1].trim());
 
-      const errMatch =
-        raw.match(
-          /<<<e>>>([\s\S]*)$/
-        );
-
-      if (errMatch) {
-        throw new Error(
-          errMatch[1].trim()
-        );
-      }
-
-      /* ---------------------------------------------------------- */
-      /* Parse AI response                                          */
-      /* ---------------------------------------------------------- */
-
-      const data =
-        parseBuild(raw);
+      const data = parseBuild(raw);
 
       if (!data.complete) {
         throw new Error(
@@ -1046,189 +773,104 @@ function App() {
         );
       }
 
-      const isQuestion =
-        /<<<QUESTION(?: [^>\n]+)?>>>/.test(
-          raw
-        );
+      const isQuestion = /<<<QUESTION(?: [^>\n]+)?>>>/.test(raw);
 
-      if (
-        !isQuestion &&
-        Object.keys(
-          data.files
-        ).length === 0
-      ) {
-        throw new Error(
-          "The AI did not return any files. Please try again."
-        );
+      if (!isQuestion && Object.keys(data.files).length === 0) {
+        throw new Error("The AI did not return any files. Please try again.");
       }
 
-      if (
-        !isQuestion &&
-        !data.files["/App.js"] &&
-        !files["/App.js"]
-      ) {
-        throw new Error(
-          "The AI response is missing /App.js."
-        );
+      if (!isQuestion && !data.files["/App.js"] && !files["/App.js"]) {
+        throw new Error("The AI response is missing /App.js.");
       }
-
-      /* ---------------------------------------------------------- */
-      /* Build change list                                          */
-      /* ---------------------------------------------------------- */
 
       const changes = [];
-
       const nextFiles = {};
 
-      Object.entries(
-        data.files
-      ).forEach(
-        ([path, code]) => {
-          nextFiles[path] = {
-            code
-          };
+      Object.entries(data.files).forEach(([path, code]) => {
+        nextFiles[path] = { code };
+        changes.push({ path, action: files[path] ? "updated" : "created" });
+      });
 
-          changes.push({
-            path,
-            action: files[path]
-              ? "updated"
-              : "created"
-          });
-        }
-      );
-
-      data.deleteFiles.forEach(
-        (path) => {
-          if (files[path]) {
-            changes.push({
-              path,
-              action: "deleted"
-            });
-          }
-        }
-      );
-
-      /* ---------------------------------------------------------- */
-      /* Update files                                                */
-      /* ---------------------------------------------------------- */
+      data.deleteFiles.forEach((path) => {
+        if (files[path]) changes.push({ path, action: "deleted" });
+      });
 
       setFiles((prev) => {
-        const merged = {
-          ...prev,
-          ...nextFiles
-        };
-
-        data.deleteFiles.forEach(
-          (path) => {
-            delete merged[path];
-          }
-        );
-
+        const merged = { ...prev, ...nextFiles };
+        data.deleteFiles.forEach((path) => {
+          delete merged[path];
+        });
         return merged;
       });
 
-      /* ---------------------------------------------------------- */
-      /* Update dependencies                                        */
-      /* ---------------------------------------------------------- */
-
-      if (
-        Object.keys(
-          data.dependencies
-        ).length > 0
-      ) {
-        setDependencies(
-          (prev) => ({
-            ...prev,
-            ...data.dependencies
-          })
-        );
+      if (Object.keys(data.dependencies).length > 0) {
+        setDependencies((prev) => ({ ...prev, ...data.dependencies }));
       }
 
-      /* ---------------------------------------------------------- */
-      /* Select generated file                                      */
-      /* ---------------------------------------------------------- */
-
-      const firstNew =
-        Object.keys(
-          nextFiles
-        )[0];
-
-      if (
-        nextFiles["/App.js"]
-      ) {
-        setActiveFile(
-          "/App.js"
-        );
+      const firstNew = Object.keys(nextFiles)[0];
+      if (nextFiles["/App.js"]) {
+        setActiveFile("/App.js");
       } else if (firstNew) {
-        setActiveFile(
-          firstNew
-        );
+        setActiveFile(firstNew);
       }
-
-      /* ---------------------------------------------------------- */
-      /* Add assistant response                                     */
-      /* ---------------------------------------------------------- */
 
       setMessages((prev) => [
         ...prev,
         {
-          id:
-            Date.now() + 1,
-
+          id: Date.now() + 1,
           role: "assistant",
-
           animate: true,
-
-          text:
-            data.message ||
-            "Done. I've updated the project preview.",
-
+          text: data.message || "Done. I've updated the project preview.",
           changes,
-
-          packages:
-            Object.keys(
-              data.dependencies
-            ),
-
-          model:
-            data.model || "",
-
-          usage:
-            data.usage || "",
-
-          suggestions:
-            data.suggestions
+          packages: Object.keys(data.dependencies),
+          model: data.model || "",
+          usage: data.usage || "",
+          suggestions: data.suggestions
         }
       ]);
     } catch (error) {
-      const message =
-        error?.message || "";
+      if (error?.name === "AbortError") {
+        stoppedByUser = true;
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: Date.now() + 1,
+            role: "assistant",
+            error: true,
+            text: "Stopped. Send another request whenever you're ready."
+          }
+        ]);
+      } else {
+        const message = error?.message || "";
+        const networkFail =
+          error instanceof TypeError || /failed to fetch/i.test(message);
 
-      const networkFail =
-        error instanceof TypeError ||
-        /failed to fetch/i.test(
-          message
-        );
-
-      setMessages((prev) => [
-        ...prev,
-        {
-          id:
-            Date.now() + 1,
-
-          role: "assistant",
-
-          error: true,
-
-          text: networkFail
-            ? "Connection toot gaya. Dobara try karo, ya request chhoti karo."
-            : message ||
-              "Unable to connect to the AI backend."
-        }
-      ]);
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: Date.now() + 1,
+            role: "assistant",
+            error: true,
+            text: networkFail
+              ? "Connection toot gaya. Dobara try karo, ya request chhoti karo."
+              : message || "Unable to connect to the AI backend."
+          }
+        ]);
+      }
     } finally {
       setLoading(false);
+      abortRef.current = null;
+
+      // A manually stopped request didn't burn much of the shared rate
+      // limit, so give a much shorter recharge instead of the full 18s.
+      const secs = stoppedByUser ? 4 : COOLDOWN_SECONDS;
+      setCooldownSeconds(secs);
+      setCooldown(secs);
     }
+  };
+
+  const stopGeneration = () => {
+    abortRef.current?.abort();
   };
 
   /* -------------------------------------------------------------- */
@@ -1237,36 +879,15 @@ function App() {
 
   const resetProject = () => {
     setProjectId(makeId());
-
-    window.history.replaceState(
-      null,
-      "",
-      "/app"
-    );
-
-    setFiles(
-      starterFiles
-    );
-
+    window.history.replaceState(null, "", "/app");
+    setFiles(starterFiles);
     setDependencies({});
-
-    setActiveFile(
-      "/App.js"
-    );
-
+    setActiveFile("/App.js");
     setStatusList([]);
-
-    setMessages([
-      {
-        ...starterMessage,
-        id: Date.now()
-      }
-    ]);
+    setMessages([{ ...starterMessage, id: Date.now() }]);
 
     try {
-      localStorage.removeItem(
-        STORAGE_KEY
-      );
+      localStorage.removeItem(STORAGE_KEY);
     } catch {
       // Ignore.
     }
@@ -1277,41 +898,20 @@ function App() {
   /* -------------------------------------------------------------- */
 
   const copyCode = async () => {
-    const code =
-      files[activeFile]?.code ||
-      "";
+    const code = files[activeFile]?.code || "";
 
     try {
-      await navigator.clipboard.writeText(
-        code
-      );
-
+      await navigator.clipboard.writeText(code);
       setCopied(true);
-
-      setTimeout(() => {
-        setCopied(false);
-      }, 1400);
+      setTimeout(() => setCopied(false), 1400);
     } catch {
       // Clipboard may be blocked.
     }
   };
 
-  /* -------------------------------------------------------------- */
-  /* File icon                                                       */
-  /* -------------------------------------------------------------- */
-
   const fileIcon = (path) => {
-    if (
-      path.endsWith(".css")
-    ) {
-      return (
-        <FileText size={15} />
-      );
-    }
-
-    return (
-      <FileCode2 size={15} />
-    );
+    if (path.endsWith(".css")) return <FileText size={15} />;
+    return <FileCode2 size={15} />;
   };
 
   /* ---------------------------------------------------------------- */
@@ -1321,17 +921,10 @@ function App() {
   return (
     <>
       <div className="appShell">
-
         {/* TOP BAR */}
         <header className="topbar">
           <div className="brandArea">
-
-            <button
-              className="mobileIcon"
-              onClick={() =>
-                setMobileMenu(true)
-              }
-            >
+            <button className="mobileIcon" onClick={() => setMobileMenu(true)}>
               <Menu size={18} />
             </button>
 
@@ -1340,68 +933,39 @@ function App() {
             </div>
 
             <div className="brandText">
-              <strong>
-                BUILDORA
-              </strong>
-
-              <small>
-                AI WEB BUILDER
-              </small>
+              <strong>BUILDORA</strong>
+              <small>AI WEB BUILDER</small>
             </div>
 
-            <div className="projectBadge">
-              Untitled project
-            </div>
+            <div className="projectBadge">Untitled project</div>
           </div>
 
           <div className="topActions">
-
             <a
               className="topButton"
               href="/"
-              style={{
-                textDecoration:
-                  "none"
-              }}
+              style={{ textDecoration: "none" }}
             >
               Home
             </a>
 
             <button
               className="topButton"
-              onClick={
-                downloadZip
-              }
+              onClick={downloadZip}
               disabled={zipping}
             >
-              <Download
-                size={15}
-              />
-
-              {zipping
-                ? "Zipping..."
-                : "Download ZIP"}
+              <Download size={15} />
+              {zipping ? "Zipping..." : "Download ZIP"}
             </button>
 
-            <button
-              className="topButton"
-              onClick={
-                resetProject
-              }
-            >
-              <RotateCcw
-                size={15}
-              />
+            <button className="topButton" onClick={resetProject}>
+              <RotateCcw size={15} />
               Reset
             </button>
 
             <button
               className="runButton"
-              onClick={() =>
-                setPreviewKey(
-                  (k) => k + 1
-                )
-              }
+              onClick={() => setPreviewKey((k) => k + 1)}
             >
               <Play size={14} />
               Run
@@ -1409,254 +973,126 @@ function App() {
 
             <button
               className="avatarButton"
-              title={
-                user
-                  ? user.name
-                  : "Log in"
-              }
+              title={user ? user.name : "Log in"}
               onClick={() => {
-                window.location.href =
-                  user
-                    ? "/"
-                    : "/login?next=/app";
+                window.location.href = user ? "/" : "/login?next=/app";
               }}
             >
-              {user
-                ? user.name
-                    .trim()[0]
-                    .toUpperCase()
-                : "G"}
+              {user ? user.name.trim()[0].toUpperCase() : "G"}
             </button>
           </div>
         </header>
 
         {/* WORKSPACE */}
         <div className="workspace">
-
           {/* LEFT PANEL */}
-          <aside
-            className={`leftPanel ${
-              sidebarOpen
-                ? ""
-                : "collapsed"
-            }`}
-          >
-
+          <aside className={`leftPanel ${sidebarOpen ? "" : "collapsed"}`}>
             <div className="chatTop">
               <div>
                 <div className="sectionTitle">
-                  <MessageSquare
-                    size={15}
-                  />
-
+                  <MessageSquare size={15} />
                   Assistant
                 </div>
-
-                <div className="sectionSub">
-                  Build your idea
-                  with AI
-                </div>
+                <div className="sectionSub">Build your idea with AI</div>
               </div>
 
               <button
                 className="smallIcon"
-                onClick={() =>
-                  setSidebarOpen(
-                    false
-                  )
-                }
+                onClick={() => setSidebarOpen(false)}
               >
-                <PanelLeft
-                  size={16}
-                />
+                <PanelLeft size={16} />
               </button>
             </div>
 
-            {/* CHAT */}
-            <div className="chatMessages">
+            {/* CHAT — gets a moving rainbow top border while generating */}
+            <div className={`chatMessages ${loading ? "chatLive" : ""}`}>
+              {messages.map((message, index) => {
+                const isLast = index === messages.length - 1;
 
-              {messages.map(
-                (
-                  message,
-                  index
-                ) => {
-                  const isLast =
-                    index ===
-                    messages.length -
-                      1;
+                return (
+                  <div key={message.id} className={`chatMessage ${message.role}`}>
+                    {message.role === "assistant" && (
+                      <div className="messageAvatar">
+                        {message.error ? (
+                          <Zap size={14} />
+                        ) : (
+                          <Sparkles size={14} />
+                        )}
+                      </div>
+                    )}
 
-                  return (
-                    <div
-                      key={
-                        message.id
-                      }
-                      className={`chatMessage ${
-                        message.role
-                      }`}
-                    >
-
-                      {message.role ===
-                        "assistant" && (
-                        <div className="messageAvatar">
-                          {message.error ? (
-                            <Zap
-                              size={
-                                14
-                              }
-                            />
-                          ) : (
-                            <Sparkles
-                              size={
-                                14
-                              }
-                            />
-                          )}
+                    {message.role === "assistant" ? (
+                      <div className="messageColumn">
+                        <div
+                          className={`messageBubble ${
+                            message.error ? "error" : ""
+                          }`}
+                        >
+                          <TypedText
+                            text={message.text}
+                            animate={!!message.animate && isLast}
+                          />
                         </div>
-                      )}
 
-                      {message.role ===
-                      "assistant" ? (
-                        <div className="messageColumn">
-
+                        {(message.model || message.usage) && (
                           <div
-                            className={`messageBubble ${
-                              message.error
-                                ? "error"
-                                : ""
-                            }`}
+                            style={{
+                              fontSize: 11,
+                              opacity: 0.55,
+                              margin: "4px 2px 0"
+                            }}
                           >
-                            <TypedText
-                              text={
-                                message.text
-                              }
-                              animate={
-                                !!message.animate &&
-                                isLast
-                              }
-                            />
+                            {message.model && <>Model: {message.model}</>}
+                            {message.model && message.usage && " · "}
+                            {message.usage && <>Tokens: {message.usage}</>}
                           </div>
+                        )}
 
-                          {/* MODEL + TOKEN INFO */}
-                          {(message.model ||
-                            message.usage) && (
-                            <div
-                              style={{
-                                fontSize: 11,
-                                opacity: 0.55,
-                                margin:
-                                  "4px 2px 0"
-                              }}
-                            >
-                              {message.model && (
-                                <>
-                                  Model:{" "}
-                                  {
-                                    message.model
-                                  }
-                                </>
-                              )}
+                        <ChangesCard
+                          changes={message.changes}
+                          packages={message.packages}
+                          onOpen={setActiveFile}
+                        />
 
-                              {message.model &&
-                                message.usage &&
-                                " · "}
-
-                              {message.usage && (
-                                <>
-                                  Tokens:{" "}
-                                  {
-                                    message.usage
-                                  }
-                                </>
-                              )}
+                        {isLast &&
+                          !loading &&
+                          message.suggestions?.length > 0 && (
+                            <div className="followUps">
+                              {message.suggestions.map((s) => (
+                                <button key={s} onClick={() => sendPrompt(s)}>
+                                  <Sparkles size={12} />
+                                  {s}
+                                </button>
+                              ))}
                             </div>
                           )}
+                      </div>
+                    ) : (
+                      <div className="messageBubble">{message.text}</div>
+                    )}
+                  </div>
+                );
+              })}
 
-                          <ChangesCard
-                            changes={
-                              message.changes
-                            }
-                            packages={
-                              message.packages
-                            }
-                            onOpen={
-                              setActiveFile
-                            }
-                          />
-
-                          {isLast &&
-                            !loading &&
-                            message
-                              .suggestions
-                              ?.length >
-                              0 && (
-                              <div className="followUps">
-                                {message.suggestions.map(
-                                  (s) => (
-                                    <button
-                                      key={s}
-                                      onClick={() =>
-                                        sendPrompt(
-                                          s
-                                        )
-                                      }
-                                    >
-                                      <Sparkles
-                                        size={
-                                          12
-                                        }
-                                      />
-
-                                      {s}
-                                    </button>
-                                  )
-                                )}
-                              </div>
-                            )}
-                        </div>
-                      ) : (
-                        <div className="messageBubble">
-                          {
-                            message.text
-                          }
-                        </div>
-                      )}
-                    </div>
-                  );
-                }
-              )}
-
-              {/* LIVE GENERATION */}
               {loading && (
                 <div className="chatMessage assistant">
-
                   <div className="messageAvatar">
-                    <Sparkles
-                      size={14}
-                    />
+                    <Sparkles size={14} />
                   </div>
 
                   <div className="messageColumn">
                     <div className="messageBubble">
-                      <GeneratingSteps
-                        statusList={
-                          statusList
-                        }
-                      />
+                      <GeneratingSteps statusList={statusList} />
                     </div>
                   </div>
                 </div>
               )}
 
-              <div
-                ref={chatEndRef}
-              />
+              <div ref={chatEndRef} />
             </div>
 
-            {/* DEFAULT SUGGESTIONS */}
-            {messages.length <=
-              1 && (
+            {messages.length <= 1 && (
               <div className="suggestions">
-
                 <button
                   onClick={() =>
                     setPrompt(
@@ -1664,12 +1100,8 @@ function App() {
                     )
                   }
                 >
-                  <Sparkles
-                    size={14}
-                  />
-
-                  SaaS landing
-                  page
+                  <Sparkles size={14} />
+                  SaaS landing page
                 </button>
 
                 <button
@@ -1679,34 +1111,19 @@ function App() {
                     )
                   }
                 >
-                  <Code2
-                    size={14}
-                  />
-
-                  Developer
-                  portfolio
+                  <Code2 size={14} />
+                  Developer portfolio
                 </button>
-
               </div>
             )}
 
             {/* PROMPT COMPOSER */}
             <div className="composer">
-
               <textarea
                 value={prompt}
-                onChange={(event) =>
-                  setPrompt(
-                    event.target
-                      .value
-                  )
-                }
+                onChange={(event) => setPrompt(event.target.value)}
                 onKeyDown={(event) => {
-                  if (
-                    event.key ===
-                      "Enter" &&
-                    !event.shiftKey
-                  ) {
+                  if (event.key === "Enter" && !event.shiftKey) {
                     event.preventDefault();
                     sendPrompt();
                   }
@@ -1716,340 +1133,177 @@ function App() {
               />
 
               <div className="composerBottom">
+                <span>Enter to send · Shift + Enter for new line</span>
 
-                <span>
-                  Enter to send ·
-                  Shift + Enter
-                  for new line
-                </span>
-
-                <button
-                  className="sendButton"
-                  onClick={() =>
-                    sendPrompt()
-                  }
-                  disabled={
-                    loading ||
-                    !prompt.trim()
-                  }
-                >
-                  {loading ? (
-                    <Loader2
-                      size={16}
-                      className="spin"
-                    />
-                  ) : (
-                    <ArrowUp
-                      size={17}
-                    />
-                  )}
-                </button>
-
+                {loading ? (
+                  <button
+                    className="sendButton stopButton"
+                    onClick={stopGeneration}
+                    title="Stop generating"
+                  >
+                    <Square size={14} />
+                  </button>
+                ) : (
+                  <button
+                    className="sendButton"
+                    onClick={() => sendPrompt()}
+                    disabled={!prompt.trim() || cooldown > 0}
+                  >
+                    <ArrowUp size={17} />
+                  </button>
+                )}
               </div>
+
+              {/* Visual-only recharge animation, replaces numeric countdown */}
+              <RechargeBar seconds={cooldown > 0 ? cooldownSeconds : 0} />
             </div>
           </aside>
 
-          {/* COLLAPSED LEFT */}
           {!sidebarOpen && (
             <button
               className="expandSidebar"
-              onClick={() =>
-                setSidebarOpen(
-                  true
-                )
-              }
+              onClick={() => setSidebarOpen(true)}
             >
-              <PanelLeft
-                size={17}
-              />
+              <PanelLeft size={17} />
             </button>
           )}
 
           {/* CENTER EDITOR */}
           <section className="editorPanel">
-
             <div className="panelHeader">
-
               <div className="panelHeading">
                 <Code2 size={15} />
                 Code
               </div>
 
-              <button
-                className="copyButton"
-                onClick={
-                  copyCode
-                }
-              >
+              <button className="copyButton" onClick={copyCode}>
                 <Copy size={14} />
-
-                {copied
-                  ? "Copied"
-                  : "Copy"}
+                {copied ? "Copied" : "Copy"}
               </button>
-
             </div>
 
             <div className="editorBody">
-
-              {/* FILE TREE */}
               <div className="fileTree">
-
                 <div className="treeHeader">
-
-                  <span>
-                    FILES
-                  </span>
-
+                  <span>FILES</span>
                   <button>
-                    <Plus
-                      size={14}
-                    />
+                    <Plus size={14} />
                   </button>
-
                 </div>
 
                 <div className="treeFolder">
-
                   <div className="folderRow">
-                    <FolderOpen
-                      size={15}
-                    />
-
-                    <span>
-                      src
-                    </span>
-
-                    <ChevronDown
-                      size={13}
-                    />
+                    <FolderOpen size={15} />
+                    <span>src</span>
+                    <ChevronDown size={13} />
                   </div>
 
-                  {fileList.map(
-                    (file) => {
-                      const filename =
-                        file.replace(
-                          "/",
-                          ""
-                        );
-
-                      return (
-                        <button
-                          key={
-                            file
-                          }
-                          className={`fileRow ${
-                            activeFile ===
-                            file
-                              ? "active"
-                              : ""
-                          }`}
-                          onClick={() =>
-                            setActiveFile(
-                              file
-                            )
-                          }
-                        >
-                          {fileIcon(
-                            file
-                          )}
-
-                          <span>
-                            {
-                              filename
-                            }
-                          </span>
-                        </button>
-                      );
-                    }
-                  )}
-
+                  {fileList.map((file) => {
+                    const filename = file.replace("/", "");
+                    return (
+                      <button
+                        key={file}
+                        className={`fileRow ${
+                          activeFile === file ? "active" : ""
+                        }`}
+                        onClick={() => setActiveFile(file)}
+                      >
+                        {fileIcon(file)}
+                        <span>{filename}</span>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
-              {/* CODE EDITOR */}
               <div className="codeArea">
-
                 <SandpackProvider
                   key={`${providerKey}-${activeFile}`}
                   template="react"
                   files={files}
                   theme="dark"
-                  customSetup={{
-                    dependencies
-                  }}
-                  options={{
-                    activeFile,
-                    visibleFiles:
-                      fileList
-                  }}
+                  customSetup={{ dependencies }}
+                  options={{ activeFile, visibleFiles: fileList }}
                 >
                   <SandpackLayout>
-
                     <SandpackCodeEditor
                       showTabs
                       showLineNumbers
                       showInlineErrors
                       wrapContent
-                      closableTabs={
-                        false
-                      }
-                      style={{
-                        height:
-                          "100%",
-                        width:
-                          "100%"
-                      }}
+                      closableTabs={false}
+                      style={{ height: "100%", width: "100%" }}
                     />
-
                   </SandpackLayout>
                 </SandpackProvider>
-
               </div>
             </div>
           </section>
 
           {/* RIGHT PREVIEW */}
           <section className="previewPanel">
-
             <div className="panelHeader">
-
               <div className="panelHeading">
-
                 <Eye size={15} />
-
                 Preview
-
                 <span className="liveBadge">
                   <span></span>
                   Live
                 </span>
-
               </div>
 
               <div className="previewControls">
-
                 <button
-                  className={
-                    previewMode ===
-                    "desktop"
-                      ? "selected"
-                      : ""
-                  }
-                  onClick={() =>
-                    setPreviewMode(
-                      "desktop"
-                    )
-                  }
+                  className={previewMode === "desktop" ? "selected" : ""}
+                  onClick={() => setPreviewMode("desktop")}
                 >
-                  <Monitor
-                    size={14}
-                  />
+                  <Monitor size={14} />
                 </button>
 
                 <button
-                  className={
-                    previewMode ===
-                    "tablet"
-                      ? "selected"
-                      : ""
-                  }
-                  onClick={() =>
-                    setPreviewMode(
-                      "tablet"
-                    )
-                  }
+                  className={previewMode === "tablet" ? "selected" : ""}
+                  onClick={() => setPreviewMode("tablet")}
                 >
-                  <Tablet
-                    size={14}
-                  />
+                  <Tablet size={14} />
                 </button>
 
                 <button
-                  className={
-                    previewMode ===
-                    "mobile"
-                      ? "selected"
-                      : ""
-                  }
-                  onClick={() =>
-                    setPreviewMode(
-                      "mobile"
-                    )
-                  }
+                  className={previewMode === "mobile" ? "selected" : ""}
+                  onClick={() => setPreviewMode("mobile")}
                 >
-                  <Smartphone
-                    size={14}
-                  />
+                  <Smartphone size={14} />
                 </button>
 
-                <button
-                  onClick={() =>
-                    setPreviewKey(
-                      (k) => k + 1
-                    )
-                  }
-                >
-                  <RefreshCw
-                    size={14}
-                  />
+                <button onClick={() => setPreviewKey((k) => k + 1)}>
+                  <RefreshCw size={14} />
                 </button>
-
               </div>
             </div>
 
             <div className="previewWorkspace">
-
-              <div
-                className={`previewFrame ${previewMode}`}
-              >
-
+              <div className={`previewFrame ${previewMode}`}>
                 <SandpackProvider
                   key={providerKey}
                   template="react"
                   files={files}
                   theme="dark"
-                  customSetup={{
-                    dependencies
-                  }}
+                  customSetup={{ dependencies }}
                   options={{
-                    activeFile:
-                      "/App.js",
-                    visibleFiles:
-                      fileList,
-                    bundlerTimeOut:
-                      120000
+                    activeFile: "/App.js",
+                    visibleFiles: fileList,
+                    bundlerTimeOut: 120000
                   }}
                 >
-
                   <SandpackLayout>
-
                     <SandpackPreview
-                      showOpenInCodeSandbox={
-                        false
-                      }
+                      showOpenInCodeSandbox={false}
                       showRefreshButton
-                      style={{
-                        height:
-                          "100%",
-                        width:
-                          "100%"
-                      }}
+                      style={{ height: "100%", width: "100%" }}
                     />
-
                   </SandpackLayout>
 
-                  <ErrorFixer
-                    onFix={
-                      sendPrompt
-                    }
-                    loading={
-                      loading
-                    }
-                  />
-
+                  <ErrorFixer onFix={sendPrompt} loading={loading} />
                 </SandpackProvider>
-
               </div>
             </div>
           </section>
@@ -2058,62 +1312,34 @@ function App() {
         {/* MOBILE DRAWER */}
         {mobileMenu && (
           <div className="mobileOverlay">
-
             <div className="mobileDrawer">
-
               <div className="drawerHeader">
-
-                <strong>
-                  BUILDORA
-                </strong>
-
-                <button
-                  onClick={() =>
-                    setMobileMenu(
-                      false
-                    )
-                  }
-                >
+                <strong>BUILDORA</strong>
+                <button onClick={() => setMobileMenu(false)}>
                   <X size={18} />
                 </button>
-
               </div>
 
               <div className="drawerContent">
-
                 <button
                   onClick={() => {
                     resetProject();
-                    setMobileMenu(
-                      false
-                    );
+                    setMobileMenu(false);
                   }}
                 >
-                  <RotateCcw
-                    size={16}
-                  />
-
+                  <RotateCcw size={16} />
                   Reset project
                 </button>
 
                 <button
                   onClick={() => {
-                    setSidebarOpen(
-                      true
-                    );
-
-                    setMobileMenu(
-                      false
-                    );
+                    setSidebarOpen(true);
+                    setMobileMenu(false);
                   }}
                 >
-                  <MessageSquare
-                    size={16}
-                  />
-
+                  <MessageSquare size={16} />
                   Assistant
                 </button>
-
               </div>
             </div>
           </div>
@@ -2122,41 +1348,19 @@ function App() {
 
       {/* FOOTER */}
       <footer className="siteFooter">
-
         <div className="footerInner">
-
           <section className="founderBlock">
-
-            <div className="founderAvatar">
-              FB
-            </div>
+            <div className="founderAvatar">FB</div>
 
             <div>
-
-              <h2>
-                Built by Farhan
-                Balouch
-              </h2>
-
+              <h2>Built by Farhan Balouch</h2>
               <p>
-                Buildora is an
-                independent project
-                by{" "}
-                <strong>
-                  Farhan Balouch
-                </strong>
-                , a developer and
-                entrepreneur from
-                Ahmadpur East,
-                Pakistan, working in
-                AI, SEO, and online
-                business. Buildora
-                is part of his
-                ongoing work
-                exploring what AI can
-                build.
+                Buildora is an independent project by{" "}
+                <strong>Farhan Balouch</strong>, a developer and entrepreneur
+                from Ahmadpur East, Pakistan, working in AI, SEO, and online
+                business. Buildora is part of his ongoing work exploring what
+                AI can build.
               </p>
-
               <a
                 href="https://farhanbalouch.com"
                 target="_blank"
@@ -2164,109 +1368,50 @@ function App() {
                 className="founderLink"
               >
                 farhanbalouch.com
-
-                <ChevronRight
-                  size={14}
-                />
+                <ChevronRight size={14} />
               </a>
-
             </div>
           </section>
 
-          {/* FAQ */}
           <section className="faqBlock">
-
-            <h2>
-              Frequently asked
-              questions
-            </h2>
+            <h2>Frequently asked questions</h2>
 
             <div className="faqList">
-
-              {faqs.map(
-                (item, i) => {
-                  const open =
-                    openFaq === i;
-
-                  return (
-                    <div
-                      key={
-                        item.q
-                      }
-                      className={`faqItem ${
-                        open
-                          ? "open"
-                          : ""
-                      }`}
+              {faqs.map((item, i) => {
+                const open = openFaq === i;
+                return (
+                  <div
+                    key={item.q}
+                    className={`faqItem ${open ? "open" : ""}`}
+                  >
+                    <button
+                      className="faqQuestion"
+                      onClick={() => setOpenFaq(open ? null : i)}
                     >
-
-                      <button
-                        className="faqQuestion"
-                        onClick={() =>
-                          setOpenFaq(
-                            open
-                              ? null
-                              : i
-                          )
-                        }
-                      >
-
-                        <span>
-                          {
-                            item.q
-                          }
-                        </span>
-
-                        <ChevronDown
-                          size={16}
-                          className={`faqChevron ${
-                            open
-                              ? "rotated"
-                              : ""
-                          }`}
-                        />
-
-                      </button>
-
-                      {open && (
-                        <p className="faqAnswer">
-                          {
-                            item.a
-                          }
-                        </p>
-                      )}
-
-                    </div>
-                  );
-                }
-              )}
-
+                      <span>{item.q}</span>
+                      <ChevronDown
+                        size={16}
+                        className={`faqChevron ${open ? "rotated" : ""}`}
+                      />
+                    </button>
+                    {open && <p className="faqAnswer">{item.a}</p>}
+                  </div>
+                );
+              })}
             </div>
           </section>
-
         </div>
 
         <div className="footerBottom">
-
-          <span>
-            ©{" "}
-            {new Date().getFullYear()}{" "}
-            Buildora
-          </span>
-
-          <span className="footerDot">
-            •
-          </span>
-
+          <span>© {new Date().getFullYear()} Buildora</span>
+          <span className="footerDot">•</span>
           <a
             href="https://farhanbalouch.com"
             target="_blank"
             rel="noopener noreferrer"
           >
-            A project by Farhan
-            Balouch
+            A project by Farhan Balouch
           </a>
-
         </div>
       </footer>
     </>
