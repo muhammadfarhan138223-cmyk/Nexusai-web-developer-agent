@@ -474,7 +474,15 @@ function findBracketIssues(replyText) {
   }
   return issues;
 }
-
+// Only spend an extra fix-round on issues that WILL actually break the
+// preview (missing files, unbalanced brackets). A single export-mismatch
+// note is often a false positive on complex files, so it alone doesn't
+// justify burning another model call and more rate-limit budget.
+function issuesWorthFixing(issues) {
+  return issues.filter(
+    (i) => !i.includes("causes \"Element type is invalid\"") || issues.length > 1
+  );
+}
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
@@ -653,7 +661,7 @@ Reply ONLY in the required tag format and end with <<<END>>>.`;
         ...findExportMismatches(buildFileMap(files, full), full)
       ];
 
-      if (issues.length > 0) {
+      if (issuesWorthFixing(issues).length > 0) {
         status(
           res,
           state,
