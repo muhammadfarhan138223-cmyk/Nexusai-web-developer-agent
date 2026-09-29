@@ -511,9 +511,8 @@ function App() {
     return (pid && getProject(pid)) || loadSavedProject();
   });
 
-  const [files, setFiles] = useState(savedProject?.files || starterFiles);
   const [dependencies, setDependencies] = useState(
-    savedProject?.dependencies || {}
+    savedProject?.dependencies || { "lucide-react": "latest" }
   );
   const [messages, setMessages] = useState(
     savedProject?.messages?.length ? savedProject.messages : [starterMessage]
