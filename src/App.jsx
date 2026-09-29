@@ -6,6 +6,7 @@ import {
   ChevronRight,
   Code2,
   Copy,
+  Download,
   Eye,
   FileCode2,
   FileText,
@@ -33,6 +34,9 @@ import {
   SandpackProvider,
   useSandpack
 } from "@codesandbox/sandpack-react";
+import { downloadProjectZip } from "./zip";
+import { useSeo } from "./seo";
+import { getProject, getUser, makeId, saveProject } from "./store";
 
 const starterFiles = {
   "/App.js": {
@@ -490,7 +494,22 @@ function ErrorFixer({ onFix, loading }) {
 
 function App() {
   // Read the saved project once, on first load only.
-  const [savedProject] = useState(loadSavedProject);
+  useSeo("Buildora Builder", "Build websites with AI.", {
+    noindex: true,
+    path: "/app"
+  });
+
+  const urlParams = new URLSearchParams(window.location.search);
+  const [projectId, setProjectId] = useState(
+    () => urlParams.get("p") || makeId()
+  );
+  const [user] = useState(getUser);
+  const [zipping, setZipping] = useState(false);
+
+  const [savedProject] = useState(() => {
+    const pid = urlParams.get("p");
+    return (pid && getProject(pid)) || loadSavedProject();
+  });
 
   const [files, setFiles] = useState(savedProject?.files || starterFiles);
   const [dependencies, setDependencies] = useState(
@@ -499,7 +518,7 @@ function App() {
   const [messages, setMessages] = useState(
     savedProject?.messages?.length ? savedProject.messages : [starterMessage]
   );
-  const [prompt, setPrompt] = useState("");
+  const [prompt, setPrompt] = useState(() => urlParams.get("idea") || "");
   const [loading, setLoading] = useState(false);
   const [activeFile, setActiveFile] = useState("/App.js");
   const [previewMode, setPreviewMode] = useState("desktop");
@@ -533,7 +552,30 @@ function App() {
     } catch {
       // Storage full or blocked — saving is a bonus, never fatal.
     }
-  }, [files, dependencies, messages]);
+
+    // Recent projects list (shown on the home page).
+    const firstPrompt = messages.find((m) => m.role === "user");
+    if (firstPrompt) {
+      saveProject({
+        id: projectId,
+        name: firstPrompt.text.slice(0, 48),
+        files,
+        dependencies,
+        messages: messages.slice(-30).map(({ animate, ...rest }) => rest)
+      });
+    }
+  }, [files, dependencies, messages, projectId]);
+
+  const downloadZip = async () => {
+    if (zipping) return;
+    setZipping(true);
+    try {
+      const first = messages.find((m) => m.role === "user");
+      await downloadProjectZip(files, dependencies, first?.text.slice(0, 40));
+    } finally {
+      setZipping(false);
+    }
+  };
 
   // Keep the newest chat message in view.
   useEffect(() => {
@@ -610,7 +652,7 @@ function App() {
       }
       raw += decoder.decode();
 
-      const errMatch = raw.match(/<<<ERROR>>>([\s\S]*)$/);
+      const errMatch = raw.match(/<<<e>>>([\s\S]*)$/);
       if (errMatch) throw new Error(errMatch[1].trim());
 
       const data = parseBuild(raw);
@@ -693,6 +735,8 @@ function App() {
   };
 
   const resetProject = () => {
+    setProjectId(makeId());
+    window.history.replaceState(null, "", "/app");
     setFiles(starterFiles);
     setDependencies({});
     setActiveFile("/App.js");
@@ -760,6 +804,19 @@ function App() {
           </div>
 
           <div className="topActions">
+            <a
+              className="topButton"
+              href="/"
+              style={{ textDecoration: "none" }}
+            >
+              Home
+            </a>
+
+            <button className="topButton" onClick={downloadZip} disabled={zipping}>
+              <Download size={15} />
+              {zipping ? "Zipping..." : "Download ZIP"}
+            </button>
+
             <button className="topButton" onClick={resetProject}>
               <RotateCcw size={15} />
               Reset
@@ -773,7 +830,15 @@ function App() {
               Run
             </button>
 
-            <button className="avatarButton">F</button>
+            <button
+              className="avatarButton"
+              title={user ? user.name : "Log in"}
+              onClick={() => {
+                window.location.href = user ? "/" : "/login?next=/app";
+              }}
+            >
+              {user ? user.name.trim()[0].toUpperCase() : "G"}
+            </button>
           </div>
         </header>
 
