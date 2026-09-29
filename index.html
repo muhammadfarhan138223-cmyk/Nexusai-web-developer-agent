@@ -1,91 +1,131 @@
 <!doctype html>
 <html lang="en">
-
 <head>
   <meta charset="UTF-8" />
-
-  <meta
-    name="viewport"
-    content="width=device-width, initial-scale=1.0"
-  />
-
-  <meta
-    name="theme-color"
-    content="#070a10"
-  />
-
-  <title>
-    Buildora — Build Websites with AI, Free | by Farhan Balouch
-  </title>
-
-  <meta
-    name="description"
-    content="Buildora is a free AI website builder — describe your idea in plain words and get a live, working website instantly. Built by Farhan Balouch."
-  />
-
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#070a10" />
+  <title>Buildora - Free AI Website Builder | Build & Download React Websites</title>
+  <meta name="description" content="Buildora is a free AI website builder. Describe your idea in plain words, get a live multi-page website and download the full React code as a ZIP. Built by Farhan Balouch." />
   <meta name="author" content="Farhan Balouch" />
-  <link rel="canonical" href="https://buildora.vercel.app/" />
+  <meta name="robots" content="index, follow, max-image-preview:large" />
+  <link rel="canonical" href="https://nexusai-web-developer-agent.vercel.app/" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 
-  <!-- Open Graph (Facebook, WhatsApp, LinkedIn previews) -->
   <meta property="og:type" content="website" />
-  <meta property="og:title" content="Buildora — Build Websites with AI, Free" />
-  <meta property="og:description" content="Describe your idea in plain words and Buildora turns it into a live, working website — instantly, for free." />
-  <meta property="og:url" content="https://buildora.vercel.app/" />
   <meta property="og:site_name" content="Buildora" />
-
-  <!-- Twitter/X card -->
+  <meta property="og:title" content="Buildora - Free AI Website Builder | Build & Download React Websites" />
+  <meta property="og:description" content="Buildora is a free AI website builder. Describe your idea in plain words, get a live multi-page website and download the full React code as a ZIP. Built by Farhan Balouch." />
+  <meta property="og:url" content="https://nexusai-web-developer-agent.vercel.app/" />
+  <meta property="og:image" content="https://nexusai-web-developer-agent.vercel.app/og.png" />
   <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:title" content="Buildora — Build Websites with AI, Free" />
-  <meta name="twitter:description" content="Describe your idea in plain words and Buildora turns it into a live, working website — instantly, for free." />
+  <meta name="twitter:title" content="Buildora - Free AI Website Builder | Build & Download React Websites" />
+  <meta name="twitter:description" content="Buildora is a free AI website builder. Describe your idea in plain words, get a live multi-page website and download the full React code as a ZIP. Built by Farhan Balouch." />
+  <meta name="twitter:image" content="https://nexusai-web-developer-agent.vercel.app/og.png" />
 
-  <!--
-    Structured data: tells Google this is Farhan Balouch's project and
-    links it back to farhanbalouch.com, so search engines connect the
-    two as the same person/owner.
-  -->
   <script type="application/ld+json">
-  {
-    "@context": "https://schema.org",
-    "@type": "WebApplication",
-    "name": "Buildora",
-    "url": "https://buildora.vercel.app/",
-    "description": "Buildora is a free AI website builder — describe your idea in plain words and get a live, working website instantly.",
-    "applicationCategory": "DeveloperApplication",
-    "operatingSystem": "Any (Web-based)",
-    "offers": {
-      "@type": "Offer",
-      "price": "0",
-      "priceCurrency": "USD"
-    },
-    "author": {
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
       "@type": "Person",
+      "@id": "https://nexusai-web-developer-agent.vercel.app/#owner",
       "name": "Farhan Balouch",
-      "url": "https://farhanbalouch.com"
+      "url": "https://farhanbalouch.com",
+      "sameAs": [
+        "https://farhanbalouch.com"
+      ]
     },
-    "creator": {
-      "@type": "Person",
-      "name": "Farhan Balouch",
-      "url": "https://farhanbalouch.com"
+    {
+      "@type": "WebSite",
+      "@id": "https://nexusai-web-developer-agent.vercel.app/#website",
+      "url": "https://nexusai-web-developer-agent.vercel.app/",
+      "name": "Buildora",
+      "publisher": {
+        "@id": "https://nexusai-web-developer-agent.vercel.app/#owner"
+      },
+      "inLanguage": "en"
+    },
+    {
+      "@type": "WebApplication",
+      "@id": "https://nexusai-web-developer-agent.vercel.app/#app",
+      "name": "Buildora",
+      "url": "https://nexusai-web-developer-agent.vercel.app/",
+      "description": "Buildora is a free AI website builder. Describe your idea and get a live, downloadable React website.",
+      "applicationCategory": "DeveloperApplication",
+      "operatingSystem": "Any (web-based)",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "USD"
+      },
+      "author": {
+        "@id": "https://nexusai-web-developer-agent.vercel.app/#owner"
+      }
+    },
+    {
+      "@type": "FAQPage",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "Is Buildora really free?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Yes. Buildora runs on free AI models, so you can describe an idea and get a working website preview at no cost."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Do I need to know how to code?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "No. Describe your website in plain English or Roman Urdu and Buildora writes the React and CSS for you, with a live preview."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Can I download the code?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Yes. Press Download ZIP in the builder to get a complete Vite + React project. Run npm install and npm run dev to use it anywhere."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Are my projects saved?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Yes. Your recent projects are saved in your browser and appear on the home page, so you can reopen and continue them any time."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "What can I build with Buildora?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Landing pages, portfolios, small business sites, SaaS pages and multi-page websites, all as clean React projects."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Who built Buildora?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Buildora was built by Farhan Balouch, a developer and entrepreneur working in AI, SEO and online business. Learn more at farhanbalouch.com."
+          }
+        }
+      ]
     }
-  }
+  ]
+}
   </script>
 </head>
-
 <body>
-
   <div id="root"></div>
-
-  <!-- Crawlers / no-JS visitors get this basic content immediately -->
   <noscript>
-    <h1>Buildora — Build Websites with AI, Free</h1>
-    <p>Buildora is a free AI website builder, created by Farhan Balouch. Visit farhanbalouch.com to learn more about the founder.</p>
+    <h1>Buildora - Free AI Website Builder</h1>
+    <p>Buildora is a free AI website builder. Describe your idea in plain words, get a live multi-page website and download the full React code as a ZIP. Built by Farhan Balouch.</p>
+    <p>Created by <a href="https://farhanbalouch.com">Farhan Balouch</a>.</p>
   </noscript>
-
-  <script
-    type="module"
-    src="/src/main.jsx"
-  ></script>
-
+  <script type="module" src="/src/main.jsx"></script>
 </body>
-
     </html>
