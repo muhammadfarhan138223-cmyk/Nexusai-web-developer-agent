@@ -510,7 +510,7 @@ function App() {
     const pid = urlParams.get("p");
     return (pid && getProject(pid)) || loadSavedProject();
   });
-
+  const [files, setFiles] = useState(savedProject?.files || starterFiles);
   const [dependencies, setDependencies] = useState(
     savedProject?.dependencies || { "lucide-react": "latest" }
   );
