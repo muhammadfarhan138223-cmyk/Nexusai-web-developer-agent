@@ -251,7 +251,7 @@ function stripFences(code) {
 }
 
 const TAG_RE =
-  /<<<(MESSAGE|QUESTION|FILE|DELETE|DEPS|SUGGESTIONS|END)(?: ([^>\n]+?))?>>>/g;
+  /<<<(MESSAGE|QUESTION|STATUS|MODEL|USAGE|FILE|DELETE|DEPS|SUGGESTIONS|END)(?: ([^>\n]+?))?>>>/g;
 
 function parseBuild(text) {
   const out = {
