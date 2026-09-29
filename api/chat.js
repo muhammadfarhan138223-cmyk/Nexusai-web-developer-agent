@@ -1,52 +1,47 @@
-/* ------------------------------------------------------------------ */
-/* MODELS - yahan sirf model ke naam badalne hain. Keys Vercel env se. */
-/* ------------------------------------------------------------------ */
 // Two chains: BIG for multipage/professional requests (smarter, slower coder
 // models first), SMALL for quick edits/small pages (faster models first).
 // Order = priority. If a provider fails OR returns unusable output, the next
 // one in the list is tried automatically.
 const PROVIDER_DEFS = {
-  qwen: {
-    name: "qwen",
+  openrouter: {
+    name: "openrouter",
     keyEnv: "OPENROUTER_API_KEY",
     url: "https://openrouter.ai/api/v1/chat/completions",
-    models: ["qwen/qwen3-coder:free"],
+    models: ["openrouter/free"],
     maxTokens: 30000
   },
-  deepseek: {
-    name: "deepseek",
-    keyEnv: "OPENROUTER_API_KEY",
-    url: "https://openrouter.ai/api/v1/chat/completions",
-    models: ["deepseek/deepseek-chat-v3.1:free"],
-    maxTokens: 30000
-  },
-  glm: {
-    name: "glm",
-    keyEnv: "OPENROUTER_API_KEY",
-    url: "https://openrouter.ai/api/v1/chat/completions",
-    models: ["z-ai/glm-5.2:free"],
-    maxTokens: 30000
-  },
+
   gemini: {
     name: "gemini",
     keyEnv: "GEMINI_API_KEY",
     url: "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
-    models: ["gemini-2.5-flash"],
+    models: [
+      "gemini-2.5-pro",
+      "gemini-2.5-flash",
+      "gemini-2.5-flash-lite"
+    ],
     maxTokens: 32000
   },
+
   groq: {
     name: "groq",
     keyEnv: "GROQ_API_KEY",
     url: "https://api.groq.com/openai/v1/chat/completions",
-    models: ["openai/gpt-oss-120b"],
+    models: [
+      "openai/gpt-oss-120b",
+      "openai/gpt-oss-20b"
+    ],
     maxTokens: 8000
   }
 };
 
-// Big/professional/multipage request -> smart coder models first.
-const CHAIN_BIG = ["qwen", "deepseek", "glm", "gemini", "groq"];
-// Small edit or simple page -> fastest models first.
-const CHAIN_SMALL = ["glm", "gemini", "qwen", "groq"];
+// Big/professional/multipage request -> OpenRouter first,
+// then Gemini model fallback chain, then Groq model fallback chain.
+const CHAIN_BIG = ["openrouter", "gemini", "groq"];
+
+// Small edit or simple page -> same provider priority,
+// with automatic model fallback inside Gemini/Groq.
+const CHAIN_SMALL = ["openrouter", "gemini", "groq"];
 
 const BIG_KEYWORDS =
   /multi[- ]?page|multipage|professional|premium|full website|complete website|saas|landing page|e-?commerce|dashboard|admin panel|blog|portfolio site|business website/i;
@@ -60,7 +55,8 @@ function pickChain(prompt, isNewBuild) {
     // Fixing broken code needs the strongest reasoning model first.
     return CHAIN_BIG.map((n) => PROVIDER_DEFS[n]);
   }
-  const names = isNewBuild && BIG_KEYWORDS.test(prompt) ? CHAIN_BIG : CHAIN_SMALL;
+  const names =
+    isNewBuild && BIG_KEYWORDS.test(prompt) ? CHAIN_BIG : CHAIN_SMALL;
   return names.map((n) => PROVIDER_DEFS[n]);
 }
 
@@ -171,7 +167,7 @@ function findExportMismatches(fileMap, replyText) {
 }
 
 // Design plan wala chhota step in models se hota hai (fast + sasta)
-const PLANNER_CHAIN = ["gemini", "groq", "qwen"];
+const PLANNER_CHAIN = ["gemini", "groq", "openrouter"];
 
 /* ------------------------------------------------------------------ */
 /* Prompts                                                             */
@@ -250,7 +246,7 @@ CATEGORY-AWARE DESIGN (do not reuse the same look for every request — pick the
 - Portfolio / personal / creative: editorial typography, large imagery, asymmetric layout, more whitespace, a personal tone.
 - E-commerce / shop: product grid with cards (image, price, add-to-cart state), category filters, a cart summary — commerce UI patterns, not a SaaS hero.
 - Restaurant / local business / blog / other real-world categories: match real-world expectations for that category (menu layout, article layout, service list) instead of defaulting to a generic tech gradient hero.
-- Read the request for its actual category and let fonts, palette, imagery and layout patterns follow that category; only fall back to the general SaaS-style hero when the category is genuinely unclear.
+- Read the request for its actual category and let fonts, palette and layout patterns follow the category; only fall back to the general SaaS-style hero when the category is genuinely unclear.
 
 DESIGN RULES (this is what makes it premium):
 - Fonts: import 2 Google Fonts with @import at the very top of /styles.css. Big display headings (clamp(2.6rem, 6vw, 5rem)), tight letter-spacing (-0.02em), line-height 1.05 for headings, 1.6 for body.
@@ -291,9 +287,11 @@ function activeChain(names) {
     .filter((p) => p.key);
 }
 
-function requestBody(p, messages, stream, maxTokens) {
+// modelOverride is the ONLY addition here.
+// It allows Gemini/Groq to try their model list one by one.
+function requestBody(p, messages, stream, maxTokens, modelOverride) {
   return JSON.stringify({
-    model: p.models[0],
+    model: modelOverride || p.models[0],
     messages,
     temperature: 0.4,
     max_tokens: maxTokens || p.maxTokens,
@@ -308,7 +306,8 @@ function headersFor(p) {
     "Content-Type": "application/json",
     ...(p.url.includes("openrouter.ai")
       ? {
-          "HTTP-Referer": process.env.SITE_URL || "https://buildora.vercel.app",
+          "HTTP-Referer":
+            process.env.SITE_URL || "https://buildora.vercel.app",
           "X-Title": "Buildora"
         }
       : {})
@@ -316,58 +315,89 @@ function headersFor(p) {
 }
 
 // Step 1: short design brief (non-streaming). Returns "" if anything fails.
+// Provider order is Gemini -> Groq -> OpenRouter.
+// Each provider also tries its models in order.
 async function makePlan(providers, prompt) {
   const ordered = PLANNER_CHAIN.map((n) =>
     providers.find((p) => p.name === n)
   ).filter(Boolean);
 
   for (const p of ordered) {
-    const ctrl = new AbortController();
-    const t = setTimeout(() => ctrl.abort(), 40000);
-    try {
-      const r = await fetch(p.url, {
-        method: "POST",
-        headers: headersFor(p),
-        body: requestBody(
-          p,
-          [
-            { role: "system", content: PLANNER_PROMPT },
-            { role: "user", content: prompt }
-          ],
-          false,
-          1500
-        ),
-        signal: ctrl.signal
-      });
-      clearTimeout(t);
-      if (!r.ok) continue;
-      const j = await r.json();
-      const text = j?.choices?.[0]?.message?.content;
-      if (text && text.length > 80) return text.trim();
-    } catch {
-      clearTimeout(t);
+    for (const model of p.models) {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), 40000);
+
+      try {
+        const r = await fetch(p.url, {
+          method: "POST",
+          headers: headersFor(p),
+          body: requestBody(
+            p,
+            [
+              { role: "system", content: PLANNER_PROMPT },
+              { role: "user", content: prompt }
+            ],
+            false,
+            1500,
+            model
+          ),
+          signal: ctrl.signal
+        });
+
+        clearTimeout(t);
+
+        if (!r.ok) continue;
+
+        const j = await r.json();
+        const text = j?.choices?.[0]?.message?.content;
+
+        if (text && text.length > 80) {
+          return text.trim();
+        }
+      } catch {
+        clearTimeout(t);
+      }
     }
   }
+
   return "";
 }
 
 // Step 2: streaming code generation
-async function streamOnce(p, messages, res, signal, state) {
+async function streamOnce(
+  p,
+  messages,
+  res,
+  signal,
+  state,
+  modelOverride
+) {
+  const model = modelOverride || p.models[0];
+
   const upstream = await fetch(p.url, {
     method: "POST",
     headers: headersFor(p),
-    body: requestBody(p, messages, true),
+    body: requestBody(p, messages, true, undefined, model),
     signal
   });
 
   if (!upstream.ok || !upstream.body) {
     const errText = await upstream.text().catch(() => "");
     let message = `${p.name} failed (${upstream.status}).`;
+
     try {
       const j = JSON.parse(errText);
-      message = j?.error?.message || j?.[0]?.error?.message || message;
+      message =
+        j?.error?.message ||
+        j?.[0]?.error?.message ||
+        message;
     } catch {}
-    return { ok: false, message };
+
+    return {
+      ok: false,
+      message,
+      attemptedModel: model
+    };
   }
 
   if (!state.started) {
@@ -376,7 +406,7 @@ async function streamOnce(p, messages, res, signal, state) {
     res.setHeader("Cache-Control", "no-cache, no-transform");
     res.setHeader("X-Accel-Buffering", "no");
     res.setHeader("X-Model-Provider", p.name);
-    res.setHeader("X-Model-Name", p.models[0]);
+    res.setHeader("X-Model-Name", model);
     state.started = true;
   }
 
@@ -389,24 +419,34 @@ async function streamOnce(p, messages, res, signal, state) {
 
   for await (const chunk of upstream.body) {
     buffer += decoder.decode(chunk, { stream: true });
+
     const lines = buffer.split("\n");
     buffer = lines.pop() || "";
 
     for (const line of lines) {
       const t = line.trim();
+
       if (!t.startsWith("data:")) continue;
+
       const payload = t.slice(5).trim();
+
       if (!payload || payload === "[DONE]") continue;
 
       let json;
+
       try {
         json = JSON.parse(payload);
       } catch {
         continue;
       }
 
-      if (json.model && !usedModel) usedModel = json.model;
-      if (json.usage) usage = json.usage;
+      if (json.model && !usedModel) {
+        usedModel = json.model;
+      }
+
+      if (json.usage) {
+        usage = json.usage;
+      }
 
       if (json.error) {
         return {
@@ -415,19 +455,134 @@ async function streamOnce(p, messages, res, signal, state) {
           finish: "error",
           message: json.error.message,
           usedModel,
-          usage
+          usage,
+          attemptedModel: model
         };
       }
+
       const choice = json.choices?.[0];
       const piece = choice?.delta?.content;
+
       if (piece) {
         text += piece;
         res.write(piece);
       }
-      if (choice?.finish_reason) finish = choice.finish_reason;
+
+      if (choice?.finish_reason) {
+        finish = choice.finish_reason;
+      }
     }
   }
-  return { ok: true, text, finish, usedModel, usage };
+
+  return {
+    ok: true,
+    text,
+    finish,
+    usedModel,
+    usage,
+    attemptedModel: model
+  };
+}
+
+// Tries all models inside the same provider before moving to
+// the next provider.
+//
+// Example:
+// Gemini:
+//   1. gemini-2.5-pro
+//   2. gemini-2.5-flash
+//   3. gemini-2.5-flash-lite
+//
+// If a model is unavailable/rate-limited before producing output,
+// the next model is attempted automatically.
+async function streamWithModelFallback(
+  p,
+  messages,
+  res,
+  signal,
+  state
+) {
+  let lastError = "";
+
+  for (const model of p.models) {
+    status(
+      res,
+      state,
+      25,
+      `Trying ${model}...`
+    );
+
+    try {
+      const r = await streamOnce(
+        p,
+        messages,
+        res,
+        signal,
+        state,
+        model
+      );
+
+      // HTTP/rate-limit/provider failure before streaming:
+      // safely try the next model.
+      if (!r.ok) {
+        lastError = r.message || `${model} failed.`;
+
+        status(
+          res,
+          state,
+          25,
+          `${model} unavailable, trying the next model...`
+        );
+
+        continue;
+      }
+
+      // Streaming error with no generated text:
+      // safely try the next model.
+      if (r.finish === "error" && !r.text) {
+        lastError = r.message || `${model} returned an error.`;
+
+        status(
+          res,
+          state,
+          25,
+          `${model} is busy, trying the next model...`
+        );
+
+        continue;
+      }
+
+      // A model has actually generated output.
+      // Keep it rather than restarting another model and duplicating
+      // already-streamed content.
+      return {
+        ...r,
+        selectedModel: r.usedModel || model
+      };
+    } catch (e) {
+      if (e?.name === "AbortError") {
+        throw e;
+      }
+
+      lastError = e?.message || `${model} request failed.`;
+
+      status(
+        res,
+        state,
+        25,
+        `${model} failed, trying the next model...`
+      );
+    }
+  }
+
+  return {
+    ok: false,
+    text: "",
+    finish: "",
+    message:
+      lastError ||
+      `${p.name} models are unavailable right now.`
+  };
 }
 
 /* ------------------------------------------------------------------ */
@@ -446,7 +601,10 @@ function status(res, state, pct, text) {
     res.setHeader("X-Accel-Buffering", "no");
     state.started = true;
   }
-  res.write(`<<<STATUS ${pct}%|${text.replace(/[>\n]/g, " ")}>>>\n`);
+
+  res.write(
+    `<<<STATUS ${pct}%|${text.replace(/[>\n]/g, " ")}>>>\n`
+  );
 }
 
 // Cheap, free, zero-token static check: catches the two most common
@@ -454,17 +612,27 @@ function status(res, state, pct, text) {
 // accidentally dropped) and braces mismatched across a file.
 function findBracketIssues(replyText) {
   const issues = [];
+
   const fileBlocks = [
     ...replyText.matchAll(
       /<<<FILE ([^>\n]+)>>>\n([\s\S]*?)(?=<<<(?:FILE|DELETE|DEPS|SUGGESTIONS|END)|$)/g
     )
   ];
-  const pairs = [["{", "}"], ["(", ")"], ["[", "]"]];
+
+  const pairs = [
+    ["{", "}"],
+    ["(", ")"],
+    ["[", "]"]
+  ];
 
   for (const [, path, body] of fileBlocks) {
     for (const [open, close] of pairs) {
-      const opens = (body.match(new RegExp(`\\${open}`, "g")) || []).length;
-      const closes = (body.match(new RegExp(`\\${close}`, "g")) || []).length;
+      const opens =
+        (body.match(new RegExp(`\\${open}`, "g")) || []).length;
+
+      const closes =
+        (body.match(new RegExp(`\\${close}`, "g")) || []).length;
+
       if (opens !== closes) {
         issues.push(
           `${path.trim()}: unbalanced "${open}${close}" (${opens} vs ${closes}) — likely a missing or extra character`
@@ -472,38 +640,53 @@ function findBracketIssues(replyText) {
       }
     }
   }
+
   return issues;
 }
+
 // Only spend an extra fix-round on issues that WILL actually break the
 // preview (missing files, unbalanced brackets). A single export-mismatch
 // note is often a false positive on complex files, so it alone doesn't
 // justify burning another model call and more rate-limit budget.
 function issuesWorthFixing(issues) {
   return issues.filter(
-    (i) => !i.includes("causes \"Element type is invalid\"") || issues.length > 1
+    (i) =>
+      !i.includes('causes "Element type is invalid"') ||
+      issues.length > 1
   );
 }
+
 export default async function handler(req, res) {
   if (req.method !== "POST") {
-    return res.status(405).json({ error: "Method not allowed" });
+    return res.status(405).json({
+      error: "Method not allowed"
+    });
   }
 
   const body = req.body || {};
   const prompt = body.prompt;
   const files = body.files || {};
   const dependencies = body.dependencies || {};
-  const history = Array.isArray(body.history) ? body.history : [];
+  const history = Array.isArray(body.history)
+    ? body.history
+    : [];
 
   if (!prompt || typeof prompt !== "string") {
-    return res.status(400).json({ error: "Please enter a website request." });
-  }
-  if (prompt.length > 6000) {
-    return res
-      .status(400)
-      .json({ error: "Your request is too long. Please shorten it." });
+    return res.status(400).json({
+      error: "Please enter a website request."
+    });
   }
 
-  const anyProviders = activeChain(CHAIN_SMALL.concat(CHAIN_BIG));
+  if (prompt.length > 6000) {
+    return res.status(400).json({
+      error: "Your request is too long. Please shorten it."
+    });
+  }
+
+  const anyProviders = activeChain(
+    CHAIN_SMALL.concat(CHAIN_BIG)
+  );
+
   if (anyProviders.length === 0) {
     return res.status(500).json({
       error:
@@ -512,13 +695,21 @@ export default async function handler(req, res) {
   }
 
   const filesText = Object.entries(files)
-    .filter(([p, c]) => isSafePath(p) && typeof c === "string")
-    .map(([p, c]) => `=== ${p} ===\n${c}`)
+    .filter(
+      ([p, c]) =>
+        isSafePath(p) &&
+        typeof c === "string"
+    )
+    .map(
+      ([p, c]) =>
+        `=== ${p} ===\n${c}`
+    )
     .join("\n\n");
 
   if (filesText.length > 150000) {
     return res.status(400).json({
-      error: "Project is too big for one request. Reset or simplify it."
+      error:
+        "Project is too big for one request. Reset or simplify it."
     });
   }
 
@@ -527,51 +718,105 @@ export default async function handler(req, res) {
       (m) =>
         m &&
         typeof m.text === "string" &&
-        (m.role === "user" || m.role === "assistant")
+        (m.role === "user" ||
+          m.role === "assistant")
     )
     .slice(-6)
-    .map((m) => ({ role: m.role, content: m.text.slice(0, 1500) }));
+    .map((m) => ({
+      role: m.role,
+      content: m.text.slice(0, 1500)
+    }));
 
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 285000);
-  const state = { started: false };
+
+  const timeout = setTimeout(
+    () => controller.abort(),
+    285000
+  );
+
+  const state = {
+    started: false
+  };
+
   let totalPromptTokens = 0;
   let totalCompletionTokens = 0;
   let sawUsage = false;
 
   const addUsage = (u) => {
     if (!u) return;
+
     sawUsage = true;
-    totalPromptTokens += u.prompt_tokens || 0;
-    totalCompletionTokens += u.completion_tokens || 0;
+
+    totalPromptTokens +=
+      u.prompt_tokens || 0;
+
+    totalCompletionTokens +=
+      u.completion_tokens || 0;
   };
 
   try {
-    status(res, state, 5, "Understanding your request...");
+    status(
+      res,
+      state,
+      5,
+      "Understanding your request..."
+    );
 
     // New site (few files) -> make a design brief first. Small edits skip this.
-    const isNewBuild = Object.keys(files).length < 4;
+    const isNewBuild =
+      Object.keys(files).length < 4;
+
     const providers = activeChain(
-      pickChain(prompt, isNewBuild).map((p) => p.name)
+      pickChain(
+        prompt,
+        isNewBuild
+      ).map((p) => p.name)
     );
-    if (isNewBuild) status(res, state, 15, "Planning the design...");
-    const plan = isNewBuild ? await makePlan(providers, prompt) : "";
+
+    if (isNewBuild) {
+      status(
+        res,
+        state,
+        15,
+        "Planning the design..."
+      );
+    }
+
+    const plan = isNewBuild
+      ? await makePlan(
+          providers,
+          prompt
+        )
+      : "";
 
     const userMessage = `USER REQUEST:
 ${prompt}
-${plan ? `\nDESIGN BRIEF (follow this closely):\n${plan}\n` : ""}
+${
+  plan
+    ? `\nDESIGN BRIEF (follow this closely):\n${plan}\n`
+    : ""
+}
 CURRENT PROJECT FILES:
 ${filesText || "(none)"}
 
 INSTALLED PACKAGES:
-${Object.keys(dependencies).join(", ") || "(none)"}
+${
+  Object.keys(dependencies).join(", ") ||
+  "(none)"
+}
 
 Reply ONLY in the required tag format and end with <<<END>>>.`;
 
     const baseMessages = [
-      { role: "system", content: SYSTEM_PROMPT },
+      {
+        role: "system",
+        content: SYSTEM_PROMPT
+      },
       ...conversationMessages,
-      { role: "user", content: userMessage }
+      {
+        role: "user",
+        content: userMessage
+      }
     ];
 
     let used = null;
@@ -579,112 +824,252 @@ Reply ONLY in the required tag format and end with <<<END>>>.`;
     const errors = [];
 
     for (const p of providers) {
-      status(res, state, 25, `Writing code with ${p.models[0]}...`);
+      status(
+        res,
+        state,
+        25,
+        `Starting with ${p.name}...`
+      );
+
       try {
-        const r = await streamOnce(p, baseMessages, res, controller.signal, state);
+        const r =
+          await streamWithModelFallback(
+            p,
+            baseMessages,
+            res,
+            controller.signal,
+            state
+          );
+
         if (!r.ok) {
-          errors.push(`${p.name}: ${r.message}`);
-          status(res, state, 25, `${p.models[0]} is unavailable, trying the next model...`);
+          errors.push(
+            `${p.name}: ${r.message}`
+          );
+
+          status(
+            res,
+            state,
+            25,
+            `${p.name} is unavailable, trying the next provider...`
+          );
+
           continue;
         }
-        if (r.finish === "error" && !r.text) {
-          errors.push(`${p.name}: ${r.message}`);
-          status(res, state, 25, `${p.models[0]} is busy, trying the next model...`);
+
+        if (
+          r.finish === "error" &&
+          !r.text
+        ) {
+          errors.push(
+            `${p.name}: ${r.message}`
+          );
+
+          status(
+            res,
+            state,
+            25,
+            `${p.name} is busy, trying the next provider...`
+          );
+
           continue;
         }
-        if (!r.text.includes("<<<FILE") && !r.text.includes("<<<QUESTION")) {
+
+        if (
+          !r.text.includes("<<<FILE") &&
+          !r.text.includes("<<<QUESTION")
+        ) {
           // Model replied but gave no usable files or question — try the
           // next provider instead of showing an empty result to the user.
-          errors.push(`${p.name}: no files in response`);
-          status(res, state, 25, `${p.models[0]} gave an unusable reply, trying the next model...`);
+          errors.push(
+            `${p.name}: no files in response`
+          );
+
+          status(
+            res,
+            state,
+            25,
+            `${p.name} gave an unusable reply, trying the next provider...`
+          );
+
           continue;
         }
-        used = p;
+
+        // Keep only the model that actually succeeded.
+        // This prevents continuation/fix calls from restarting the
+        // entire provider model chain unnecessarily.
+        used = {
+          ...p,
+          models: [
+            r.selectedModel ||
+              r.usedModel ||
+              p.models[0]
+          ]
+        };
+
         full = r.text;
+
         addUsage(r.usage);
+
         console.log(
-          `[Buildora] provider=${p.name} model=${r.usedModel || p.models[0]} plan=${plan ? "yes" : "no"}`
+          `[Buildora] provider=${p.name} model=${
+            r.usedModel ||
+            r.selectedModel ||
+            p.models[0]
+          } plan=${plan ? "yes" : "no"}`
         );
+
         break;
       } catch (e) {
-        if (e?.name === "AbortError") throw e;
-        errors.push(`${p.name}: ${e?.message || "request failed"}`);
-        status(res, state, 25, `${p.models[0]} failed, trying the next model...`);
+        if (e?.name === "AbortError") {
+          throw e;
+        }
+
+        errors.push(
+          `${p.name}: ${
+            e?.message ||
+            "request failed"
+          }`
+        );
+
+        status(
+          res,
+          state,
+          25,
+          `${p.name} failed, trying the next provider...`
+        );
       }
     }
 
     if (!used) {
       clearTimeout(timeout);
-      console.error("[Buildora] all providers failed:", errors);
+
+      console.error(
+        "[Buildora] all providers failed:",
+        errors
+      );
+
       const msg =
         "All AI models are busy or rate-limited right now. Please wait a few seconds and try again.";
+
       if (res.headersSent) {
-        res.write(`\n<<<e>>>${msg}`);
+        res.write(
+          `\n<<<e>>>${msg}`
+        );
         return res.end();
       }
-      return res.status(502).json({ error: msg });
+
+      return res.status(502).json({
+        error: msg
+      });
     }
 
     // Cut off? Ask the same model to continue (up to 3 times).
-    for (let round = 0; round < 3 && !full.includes("<<<END>>>"); round++) {
-      status(res, state, 55, "Reply was long, continuing...");
-      const r = await streamOnce(
-        used,
-        [
-          ...baseMessages,
-          { role: "assistant", content: full },
-          {
-            role: "user",
-            content:
-              "Your reply was cut off. Continue EXACTLY from the last character. Do not repeat anything, do not restart the current file, no commentary. Finish the current file, then remaining files, then DEPS, SUGGESTIONS and <<<END>>>."
-          }
-        ],
+    for (
+      let round = 0;
+      round < 3 &&
+      !full.includes("<<<END>>>");
+      round++
+    ) {
+      status(
         res,
-        controller.signal,
-        state
+        state,
+        55,
+        "Reply was long, continuing..."
       );
-      if (!r.ok || !r.text) break;
+
+      const r =
+        await streamOnce(
+          used,
+          [
+            ...baseMessages,
+            {
+              role: "assistant",
+              content: full
+            },
+            {
+              role: "user",
+              content:
+                "Your reply was cut off. Continue EXACTLY from the last character. Do not repeat anything, do not restart the current file, no commentary. Finish the current file, then remaining files, then DEPS, SUGGESTIONS and <<<END>>>."
+            }
+          ],
+          res,
+          controller.signal,
+          state,
+          used.models[0]
+        );
+
+      if (!r.ok || !r.text) {
+        break;
+      }
+
       full += r.text;
       addUsage(r.usage);
     }
 
-    const isQuestion = full.includes("<<<QUESTION");
+    const isQuestion =
+      full.includes("<<<QUESTION");
 
     if (!isQuestion) {
-      status(res, state, 70, "Checking generated files for errors...");
+      status(
+        res,
+        state,
+        70,
+        "Checking generated files for errors..."
+      );
 
       // Self-check pass #1: static analysis, costs zero tokens.
-      const existingPaths = Object.keys(files).filter(isSafePath);
+      const existingPaths =
+        Object.keys(files).filter(
+          isSafePath
+        );
+
       let issues = [
-        ...findMissingImports(existingPaths, full),
+        ...findMissingImports(
+          existingPaths,
+          full
+        ),
         ...findBracketIssues(full),
-        ...findExportMismatches(buildFileMap(files, full), full)
+        ...findExportMismatches(
+          buildFileMap(files, full),
+          full
+        )
       ];
 
-      if (issuesWorthFixing(issues).length > 0) {
+      if (
+        issuesWorthFixing(
+          issues
+        ).length > 0
+      ) {
         status(
           res,
           state,
           82,
           `Found ${issues.length} issue(s), fixing with ${used.models[0]}...`
         );
-        const r = await streamOnce(
-          used,
-          [
-            ...baseMessages,
-            { role: "assistant", content: full },
-            {
-              role: "user",
-              content:
-                "Your reply has these problems, which will break the live preview:\n" +
-                issues.join("\n") +
-                "\n\nReturn ONLY the COMPLETE corrected file(s) using <<<FILE path>>>, nothing else, then <<<END>>>. Do not repeat files that are already correct."
-            }
-          ],
-          res,
-          controller.signal,
-          state
-        );
+
+        const r =
+          await streamOnce(
+            used,
+            [
+              ...baseMessages,
+              {
+                role: "assistant",
+                content: full
+              },
+              {
+                role: "user",
+                content:
+                  "Your reply has these problems, which will break the live preview:\n" +
+                  issues.join("\n") +
+                  "\n\nReturn ONLY the COMPLETE corrected file(s) using <<<FILE path>>>, nothing else, then <<<END>>>. Do not repeat files that are already correct."
+              }
+            ],
+            res,
+            controller.signal,
+            state,
+            used.models[0]
+          );
+
         if (r.ok && r.text) {
           full += r.text;
           addUsage(r.usage);
@@ -692,10 +1077,17 @@ Reply ONLY in the required tag format and end with <<<END>>>.`;
 
         // Self-check pass #2: verify the fix actually resolved it.
         const stillIssues = [
-          ...findMissingImports(existingPaths, full),
+          ...findMissingImports(
+            existingPaths,
+            full
+          ),
           ...findBracketIssues(full),
-          ...findExportMismatches(buildFileMap(files, full), full)
+          ...findExportMismatches(
+            buildFileMap(files, full),
+            full
+          )
         ];
+
         status(
           res,
           state,
@@ -705,12 +1097,26 @@ Reply ONLY in the required tag format and end with <<<END>>>.`;
             : "Rechecked — some issues may remain. Use Fix with AI if the preview shows an error."
         );
       } else {
-        status(res, state, 94, "Rechecked — no issues found.");
+        status(
+          res,
+          state,
+          94,
+          "Rechecked — no issues found."
+        );
       }
     }
 
-    status(res, state, 100, "Done.");
-    res.write(`<<<MODEL ${used.name} / ${used.models[0]}>>>\n`);
+    status(
+      res,
+      state,
+      100,
+      "Done."
+    );
+
+    res.write(
+      `<<<MODEL ${used.name} / ${used.models[0]}>>>\n`
+    );
+
     if (sawUsage) {
       res.write(
         `<<<USAGE ~${totalPromptTokens} prompt + ~${totalCompletionTokens} completion tokens>>>\n`
@@ -718,21 +1124,37 @@ Reply ONLY in the required tag format and end with <<<END>>>.`;
     }
 
     clearTimeout(timeout);
+
     return res.end();
   } catch (error) {
     clearTimeout(timeout);
-    console.error("Buildora backend error:", error);
+
+    console.error(
+      "Buildora backend error:",
+      error
+    );
+
     const message =
       error?.name === "AbortError"
         ? "The AI took too long. Try a smaller request."
-        : error?.message || "Buildora could not generate the website.";
+        : error?.message ||
+          "Buildora could not generate the website.";
 
     if (res.headersSent) {
-      res.write(`\n<<<e>>>${message}`);
+      res.write(
+        `\n<<<e>>>${message}`
+      );
       return res.end();
     }
+
     return res
-      .status(error?.name === "AbortError" ? 504 : 500)
-      .json({ error: message });
+      .status(
+        error?.name === "AbortError"
+          ? 504
+          : 500
+      )
+      .json({
+        error: message
+      });
   }
 }
