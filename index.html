@@ -120,6 +120,14 @@
   </script>
 </head>
 <body>
+  <script>
+  window.onerror = function (msg, src, line, col) {
+    document.body.innerHTML =
+      '<pre style="color:#fff;background:#900;padding:16px;white-space:pre-wrap;font-size:14px">' +
+      'ERROR: ' + msg + '\nLine: ' + line + ':' + col +
+      '</pre>' + document.body.innerHTML;
+  };
+  </script>
   <div id="root"></div>
   <noscript>
     <h1>Buildora - Free AI Website Builder</h1>
