@@ -51,9 +51,71 @@ const CHAIN_SMALL = ["glm", "gemini", "qwen", "groq"];
 const BIG_KEYWORDS =
   /multi[- ]?page|multipage|professional|premium|full website|complete website|saas|landing page|e-?commerce|dashboard|admin panel|blog|portfolio site|business website/i;
 
+// Detects both the auto "Fix with AI" message and a user typing about an error.
+const FIX_KEYWORDS =
+  /live preview shows this error|corrected complete file|fix (it|this)|error:|is invalid|could not find|is not defined|unexpected token/i;
+
 function pickChain(prompt, isNewBuild) {
+  if (FIX_KEYWORDS.test(prompt)) {
+    // Fixing broken code needs the strongest reasoning model first.
+    return CHAIN_BIG.map((n) => PROVIDER_DEFS[n]);
+  }
   const names = isNewBuild && BIG_KEYWORDS.test(prompt) ? CHAIN_BIG : CHAIN_SMALL;
   return names.map((n) => PROVIDER_DEFS[n]);
+}
+
+/* ------------------------------------------------------------------ */
+/* Missing-import auto-repair                                          */
+/* ------------------------------------------------------------------ */
+
+const MINI_FILE_RE = /<<<FILE ([^>\n]+)>>>/g;
+const IMPORT_RE = /from\s+["'](\.[^"']+)["']/g;
+
+function resolvePath(fromFile, importPath) {
+  const fromDir = fromFile.split("/").slice(0, -1);
+  const parts = importPath.split("/");
+  const stack = [...fromDir];
+  for (const part of parts) {
+    if (part === "." || part === "") continue;
+    if (part === "..") stack.pop();
+    else stack.push(part);
+  }
+  return "/" + stack.filter(Boolean).join("/");
+}
+
+// Returns the list of imported local files that don't exist anywhere
+// (not in the existing project, not in this reply's new files).
+function findMissingImports(existingPaths, replyText) {
+  const newPaths = new Set(existingPaths);
+  let m;
+  MINI_FILE_RE.lastIndex = 0;
+  while ((m = MINI_FILE_RE.exec(replyText))) newPaths.add(m[1].trim());
+
+  const missing = new Set();
+  const fileBlocks = [
+    ...replyText.matchAll(
+      /<<<FILE ([^>\n]+)>>>\n([\s\S]*?)(?=<<<(?:FILE|DELETE|DEPS|SUGGESTIONS|END)|$)/g
+    )
+  ];
+
+  for (const [, path, body] of fileBlocks) {
+    const from = path.trim();
+    let im;
+    IMPORT_RE.lastIndex = 0;
+    while ((im = IMPORT_RE.exec(body))) {
+      const resolved = resolvePath(from, im[1]);
+      const candidates = [
+        resolved,
+        resolved + ".js",
+        resolved + ".jsx",
+        resolved + "/index.js"
+      ];
+      if (!candidates.some((c) => newPaths.has(c))) {
+        missing.add(resolved + " (imported from " + from + ")");
+      }
+    }
+  }
+  return [...missing];
 }
 
 // Design plan wala chhota step in models se hota hai (fast + sasta)
@@ -401,7 +463,8 @@ Reply ONLY in the required tag format and end with <<<END>>>.`;
       clearTimeout(timeout);
       console.error("[Buildora] all providers failed:", errors);
       return res.status(502).json({
-        error: errors.length ? errors.join(" | ") : "All AI providers failed."
+        error:
+          "All AI models are busy or rate-limited right now. Please wait a few seconds and try again."
       });
     }
 
@@ -424,6 +487,33 @@ Reply ONLY in the required tag format and end with <<<END>>>.`;
       );
       if (!r.ok || !r.text) break;
       full += r.text;
+    }
+
+    // Auto-repair: if the model referenced a component it never wrote,
+    // ask it (once) to add exactly the missing file(s), instead of the
+    // preview breaking with "Could not find module".
+    const existingPaths = Object.keys(files).filter(isSafePath);
+    const missing = findMissingImports(existingPaths, full);
+    if (missing.length > 0) {
+      console.log("[Buildora] missing imports, repairing:", missing);
+      const r = await streamOnce(
+        used,
+        [
+          ...baseMessages,
+          { role: "assistant", content: full },
+          {
+            role: "user",
+            content:
+              "Your reply is missing file(s) that are imported but never written, which breaks the preview:\n" +
+              missing.join("\n") +
+              "\n\nReturn ONLY the COMPLETE missing file(s) using <<<FILE path>>>, nothing else, then <<<END>>>. Do not repeat files you already sent."
+          }
+        ],
+        res,
+        controller.signal,
+        state
+      );
+      if (r.ok && r.text) full += r.text;
     }
 
     clearTimeout(timeout);
