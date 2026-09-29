@@ -1487,3 +1487,79 @@ button:disabled {
   border-color: #3b6bb5;
   color: #cfe2ff;
 }
+/* ---------- Recharge bar (replaces numeric cooldown) ---------- */
+.rechargeBar {
+  height: 3px;
+  width: 100%;
+  margin-top: 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  overflow: hidden;
+}
+
+.rechargeFill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    #38bdf8,
+    #a78bfa,
+    #f472b6,
+    #38bdf8
+  );
+  background-size: 300% 100%;
+  animation: rechargeShimmer 1.4s linear infinite;
+  transition: width 0.05s linear;
+}
+
+@keyframes rechargeShimmer {
+  0% {
+    background-position: 0% 0%;
+  }
+  100% {
+    background-position: 300% 0%;
+  }
+}
+
+/* ---------- Chat glow while a build is streaming ---------- */
+.chatMessages.chatLive {
+  position: relative;
+}
+
+.chatMessages.chatLive::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(
+    90deg,
+    #38bdf8,
+    #a78bfa,
+    #f472b6,
+    #facc15,
+    #38bdf8
+  );
+  background-size: 300% 100%;
+  animation: chatGlowMove 2.2s linear infinite;
+  z-index: 2;
+}
+
+@keyframes chatGlowMove {
+  0% {
+    background-position: 0% 0%;
+  }
+  100% {
+    background-position: -300% 0%;
+  }
+}
+
+/* ---------- Stop button ---------- */
+.stopButton {
+  background: #ef4444 !important;
+}
+
+.stopButton:hover {
+  background: #dc2626 !important;
+}
