@@ -334,7 +334,7 @@ function headersFor(p) {
 // 285s request budget means a single stuck model can't eat the whole
 // budget and produce a generic "took too long" failure — it gets
 // dropped and the next model/provider gets a real chance instead.
-const ATTEMPT_TIMEOUT_MS = 45000;
+const ATTEMPT_TIMEOUT_MS = 75000;
 
 // Step 1: short design brief (non-streaming). Returns "" if anything fails.
 // Provider order is Gemini -> Groq -> OpenRouter.
