@@ -763,7 +763,19 @@ function App() {
       raw += decoder.decode();
 
       const errMatch = raw.match(/<<<e>>>([\s\S]*)$/);
-      if (errMatch) throw new Error(errMatch[1].trim());
+      let partialWarning = "";
+
+      if (errMatch) {
+        const errText = errMatch[1].trim();
+
+        if (errText.startsWith("PARTIAL:")) {
+          // Not a hard failure — some files finished. Strip the marker,
+          // keep going so those files get saved, just warn the user.
+          partialWarning = errText.replace(/^PARTIAL:\s*/, "");
+        } else {
+          throw new Error(errText);
+        }
+      }
 
       const data = parseBuild(raw);
 
@@ -820,7 +832,9 @@ function App() {
           id: Date.now() + 1,
           role: "assistant",
           animate: true,
-          text: data.message || "Done. I've updated the project preview.",
+          text:
+            (data.message || "Done. I've updated the project preview.") +
+            (partialWarning ? `\n\n⚠️ ${partialWarning}` : ""),
           changes,
           packages: Object.keys(data.dependencies),
           model: data.model || "",
