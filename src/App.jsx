@@ -552,7 +552,7 @@ function RechargeBar({ seconds }) {
 /* Main App                                                           */
 /* ------------------------------------------------------------------ */
 
-const COOLDOWN_SECONDS = 18;
+const COOLDOWN_SECONDS = 35;
 
 function App() {
   useSeo("Buildora Builder", "Build websites with AI.", {
