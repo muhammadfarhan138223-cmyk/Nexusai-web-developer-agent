@@ -707,10 +707,16 @@ function findCssIssues(replyText) {
 // preview (missing files, unbalanced brackets). A single export-mismatch
 // note is often a false positive on complex files, so it alone doesn't
 // justify burning another model call and more rate-limit budget.
+// Only spend an extra model call on issues that will DEFINITELY break
+// the preview. This keeps small edits down to 1 model call instead of
+// 2-3, which matters a lot on a shared free-tier rate limit.
 function issuesWorthFixing(issues) {
-  return issues.filter(
-    (i) => !i.includes('causes "Element type is invalid"') || issues.length > 1
+  const serious = issues.filter(
+    (i) =>
+      i.includes('unbalanced') ||
+      i.includes('never closed')
   );
+  return serious;
 }
 
 /* ------------------------------------------------------------------ */
