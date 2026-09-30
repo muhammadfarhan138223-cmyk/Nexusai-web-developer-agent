@@ -331,7 +331,7 @@ function headersFor(p) {
 }
 
 // Per-attempt network timeout. Keeping this well below the overall
-// 285s request budget means a single stuck model can't eat the whole
+// 270s request budget means a single stuck model can't eat the whole
 // budget and produce a generic "took too long" failure — it gets
 // dropped and the next model/provider gets a real chance instead.
 const ATTEMPT_TIMEOUT_MS = 75000;
@@ -412,7 +412,7 @@ async function streamOnce(p, messages, res, signal, state, modelOverride) {
     clearTimeout(attemptTimeout);
     signal.removeEventListener("abort", onAbort);
 
-    // If the OVERALL request was aborted (user hit Stop, or the 285s
+    // If the OVERALL request was aborted (user hit Stop, or the 270s
     // budget ran out), propagate that up so we stop entirely.
     if (signal.aborted) {
       const err = new Error("aborted");
@@ -665,6 +665,38 @@ function findBracketIssues(replyText) {
           `${path.trim()}: unbalanced "${open}${close}" (${opens} vs ${closes}) — likely a missing or extra character`
         );
       }
+    }
+  }
+
+  return issues;
+}
+
+// CSS-specific check: catches "Unknown word" / broken CSS caused by an
+// odd number of quotes (a string that never closed) inside a .css file
+// — brackets alone don't catch this class of error.
+function findCssIssues(replyText) {
+  const issues = [];
+
+  const fileBlocks = [
+    ...replyText.matchAll(
+      /<<<FILE ([^>\n]+\.css)>>>\n([\s\S]*?)(?=<<<(?:FILE|DELETE|DEPS|SUGGESTIONS|END)|$)/g
+    )
+  ];
+
+  for (const [, path, body] of fileBlocks) {
+    const singleQuotes = (body.match(/'/g) || []).length;
+    const doubleQuotes = (body.match(/"/g) || []).length;
+
+    if (singleQuotes % 2 !== 0) {
+      issues.push(
+        `${path.trim()}: an odd number of ' characters — a string was likely never closed, which breaks CSS parsing`
+      );
+    }
+
+    if (doubleQuotes % 2 !== 0) {
+      issues.push(
+        `${path.trim()}: an odd number of " characters — a string was likely never closed, which breaks CSS parsing`
+      );
     }
   }
 
@@ -962,6 +994,7 @@ Reply ONLY in the required tag format and end with <<<END>>>.`;
       let issues = [
         ...findMissingImports(existingPaths, full),
         ...findBracketIssues(full),
+        ...findCssIssues(full),
         ...findExportMismatches(buildFileMap(files, full), full)
       ];
 
@@ -1008,6 +1041,7 @@ Reply ONLY in the required tag format and end with <<<END>>>.`;
         const stillIssues = [
           ...findMissingImports(existingPaths, full),
           ...findBracketIssues(full),
+          ...findCssIssues(full),
           ...findExportMismatches(buildFileMap(files, full), full)
         ];
 
@@ -1067,4 +1101,4 @@ Reply ONLY in the required tag format and end with <<<END>>>.`;
       .status(error?.name === "AbortError" ? 504 : 500)
       .json({ error: message });
   }
-      }
+    }
