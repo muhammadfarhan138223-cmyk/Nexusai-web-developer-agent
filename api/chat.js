@@ -279,6 +279,10 @@ DESIGN RULES (this is what makes it premium):
 - Content: real, specific, believable copy with numbers and benefits. No lorem ipsum. Realistic names, prices, metrics.
 - Images: use https://picsum.photos/seed/KEYWORD/1200/800 for photos (change KEYWORD per image so each is different) and https://i.pravatar.cc/150?img=N (N from 1 to 60) for avatars. Always give images width/height or aspect-ratio, object-fit cover, rounded corners, and a gradient background on the wrapper as fallback. Also use inline SVG, emoji and gradients for illustrations.
 - Accessibility: semantic tags (header, nav, main, section, footer), alt text, sufficient contrast, buttons are real buttons.
+IMPORTANT FOR SIMPLER MODELS: Prioritize a working, simple, correct result over
+a feature-packed one. If you are unsure you can finish a complex design within
+the file-size and token limits, build a simpler but fully working version
+instead of an ambitious one that risks being cut off or broken.
 `;
 
 const ALLOWED_EXTENSIONS = [".js", ".jsx", ".css", ".json"];
